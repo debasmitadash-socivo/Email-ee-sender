@@ -1,0 +1,22 @@
+-- pg_cron schedule for the tick engine.
+-- RUN THIS MANUALLY in the SQL editor AFTER deploying the edge functions,
+-- replacing <PROJECT_REF> and <SERVICE_ROLE_KEY>. It is included as a
+-- migration for the record; the placeholders make it a no-op until edited.
+--
+--   select cron.schedule(
+--     'tick', '* * * * *',
+--     $$ select net.http_post(
+--          url := 'https://<PROJECT_REF>.supabase.co/functions/v1/tick',
+--          headers := '{"Authorization":"Bearer <SERVICE_ROLE_KEY>","Content-Type":"application/json"}'::jsonb,
+--          body := '{}'::jsonb) $$);
+--
+-- Daily self-ping keeps the Vercel app + Supabase project warm (07:00 UTC):
+--
+--   select cron.schedule(
+--     'health-ping', '0 7 * * *',
+--     $$ select net.http_get(url := 'https://<APP_URL>/api/health') $$);
+--
+-- Backup keep-alive: create a free cron-job.org job hitting
+-- https://<APP_URL>/api/health once a day. This guards against Supabase's
+-- ~7-day inactivity pause even if pg_cron is ever disabled.
+select 1;
