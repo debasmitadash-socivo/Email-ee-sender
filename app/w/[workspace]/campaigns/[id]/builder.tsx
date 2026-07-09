@@ -137,7 +137,10 @@ export function CampaignBuilder(props: {
             </Chip>
           ))}
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
+          <a href={`/w/${props.slug}/campaigns/${campaign.id}/analytics`} className="text-sm text-secondary hover:underline mr-2">
+            Analytics
+          </a>
           <Button variant="outline" onClick={seedTest} disabled={busy === "seed"}>
             {busy === "seed" ? "…" : "Seed test"}
           </Button>
