@@ -9,6 +9,7 @@ const NAV = [
   { seg: "mailboxes", label: "Mailboxes" },
   { seg: "leads", label: "Leads" },
   { seg: "campaigns", label: "Campaigns" },
+  { seg: "approvals", label: "Approvals" },
   { seg: "inbox", label: "Inbox" },
   { seg: "templates", label: "Templates" },
   { seg: "knowledge", label: "Knowledge" },
