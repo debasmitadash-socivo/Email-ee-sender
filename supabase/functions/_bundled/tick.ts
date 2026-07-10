@@ -1074,10 +1074,11 @@ async function handleInbound(db, mb, msg) {
       }
     }
   }
+  if (!campaignLead) return;
   const { data: stored } = await db.from("messages").insert({
     workspace_id: mb.workspace_id,
     mailbox_id: mb.id,
-    campaign_lead_id: (campaignLead == null ? void 0 : campaignLead.id) ?? null,
+    campaign_lead_id: campaignLead.id,
     direction: "inbound",
     provider_message_id: msg.providerMessageId,
     provider_thread_id: msg.providerThreadId,
@@ -1090,7 +1091,7 @@ async function handleInbound(db, mb, msg) {
     body: msg.body,
     occurred_at: msg.occurredAt
   }).select().single();
-  if (!campaignLead || !stored) return;
+  if (!stored) return;
   let category = "other";
   if (isBounceSender) {
     category = "bounce";

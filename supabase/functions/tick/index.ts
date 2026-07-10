@@ -669,13 +669,16 @@ async function handleInbound(db: SupabaseClient, mb: Row, msg: Inbound) {
     }
   }
 
-  // store the message regardless (master inbox shows everything relevant)
+  // Only record inbound mail that belongs to our outreach (a matched
+  // campaign_lead, or an attributable bounce). General inbox mail —
+  // newsletters, notifications — is skipped so the master inbox stays clean.
+  if (!campaignLead) return;
   const { data: stored } = await db
     .from("messages")
     .insert({
       workspace_id: mb.workspace_id,
       mailbox_id: mb.id,
-      campaign_lead_id: campaignLead?.id ?? null,
+      campaign_lead_id: campaignLead.id,
       direction: "inbound",
       provider_message_id: msg.providerMessageId,
       provider_thread_id: msg.providerThreadId,
@@ -690,7 +693,7 @@ async function handleInbound(db: SupabaseClient, mb: Row, msg: Inbound) {
     })
     .select()
     .single();
-  if (!campaignLead || !stored) return;
+  if (!stored) return;
 
   // classify (§9.3): heuristics for bounce/OOO/unsubscribe, AI chain for the rest
   let category = "other";
