@@ -27,6 +27,15 @@ export default function LoginPage() {
       setError(res.error.message);
       return;
     }
+    // If email confirmation is enabled in Supabase, signUp returns no session —
+    // don't silently bounce back to login; tell the user what to do.
+    if (mode === "signup" && !res.data.session) {
+      setError(
+        "Account created, but this Supabase project requires email confirmation. Either click the link in the confirmation email, or disable Authentication → Email → 'Confirm email' in Supabase, then sign in."
+      );
+      setMode("signin");
+      return;
+    }
     router.push("/");
     router.refresh();
   }
