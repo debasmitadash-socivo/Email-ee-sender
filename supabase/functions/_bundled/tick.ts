@@ -639,9 +639,10 @@ ${footerLines.join("\n")}`;
 var SEND_BATCH = 20;
 var POLL_MAILBOXES = 10;
 var RESEARCH_BATCH = 5;
+var CRON_AUTH = Deno.env.get("CRON_SECRET") || Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "___never___";
 Deno.serve(async (req) => {
   const auth = req.headers.get("Authorization") ?? "";
-  if (!auth.includes(Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "___")) {
+  if (!auth.includes(CRON_AUTH)) {
     return new Response("unauthorized", { status: 401 });
   }
   const db = serviceClient();
@@ -1198,7 +1199,7 @@ async function invokeResearch() {
   const res = await fetch(url, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+      Authorization: `Bearer ${CRON_AUTH}`,
       "Content-Type": "application/json"
     },
     body: JSON.stringify({ batch: RESEARCH_BATCH })

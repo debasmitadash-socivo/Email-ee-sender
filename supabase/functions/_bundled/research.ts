@@ -333,9 +333,10 @@ function renderVars(text, vars, slots = {}) {
 
 // supabase/functions/research/index.ts
 var CACHE_TTL_DAYS = 30;
+var CRON_AUTH = Deno.env.get("CRON_SECRET") || Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "___never___";
 Deno.serve(async (req) => {
   const auth = req.headers.get("Authorization") ?? "";
-  if (!auth.includes(Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "___")) {
+  if (!auth.includes(CRON_AUTH)) {
     return new Response("unauthorized", { status: 401 });
   }
   const db = serviceClient();
