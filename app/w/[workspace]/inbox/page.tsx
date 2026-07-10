@@ -2,13 +2,14 @@ import { requireWorkspace } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/ui";
 import { InboxClient } from "./inbox-client";
+import { temperatureCategories } from "@/lib/temperature";
 
 export default async function InboxPage({
   params,
   searchParams,
 }: {
   params: { workspace: string };
-  searchParams: { category?: string; lead?: string };
+  searchParams: { category?: string; temp?: string; lead?: string };
 }) {
   const { workspace } = await requireWorkspace(params.workspace);
   const supabase = createClient();
@@ -21,6 +22,10 @@ export default async function InboxPage({
     .order("occurred_at", { ascending: false })
     .limit(100);
   if (searchParams.category) q = q.eq("category", searchParams.category);
+  else if (searchParams.temp && searchParams.temp in temperatureCategories) {
+    const cats = temperatureCategories[searchParams.temp as keyof typeof temperatureCategories];
+    if (cats.length) q = q.in("category", cats);
+  }
 
   const [{ data: messages }, { data: positives }] = await Promise.all([
     q,
@@ -43,6 +48,7 @@ export default async function InboxPage({
         positives={(positives ?? []) as any[]}
         /* eslint-enable @typescript-eslint/no-explicit-any */
         activeCategory={searchParams.category ?? null}
+        activeTemp={searchParams.temp ?? null}
       />
     </div>
   );

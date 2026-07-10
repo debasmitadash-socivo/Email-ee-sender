@@ -91,6 +91,20 @@ backup against Supabase's ~7-day inactivity pause (the pg_cron tick already gene
 7. Replies land in the **Inbox** categorised; positive replies notify instantly (email/Telegram/n8n
    per Settings → Notifications).
 
+## Contacts (CRM-style 1:1 flow)
+
+Alongside bulk campaigns, the **Contacts** page is a simpler front door to the same engine for
+one-at-a-time outreach: add a person (email + name), pick a template, set a cadence
+("follow up every N days, up to M times") and the engine does the rest — sending, in-thread
+follow-ups, stop-on-reply. Behind the scenes each (template, cadence) combo becomes a reusable
+always-on campaign, so every deliverability guard applies unchanged. AI-slot templates always wait
+for your approval before sending; static templates schedule immediately. Every contact carries a
+derived **temperature**: 🟢 warm (interested/info request) · 🔵 cold (no reply yet, sequence
+running) · 🟡 neutral (not now/OOO — rescheduled, not dead) · 🔴 rejected (not interested/bounced/
+unsubscribed). Sequences stop automatically on warm and rejected, continue on cold, and push +3
+business days on OOO. Adding a contact also turns on instant notifications for *any* reply (not
+just positive) — dial it back in Settings → Notifications if too chatty.
+
 ## Deliverability Guard (enforced, not suggested)
 
 Launch gate (blocking DNS checks) · warm-up ramp wk1 8/day → wk4 cap (hard max 50/day) · 2–9 min

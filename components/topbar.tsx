@@ -7,6 +7,7 @@ import type { Workspace } from "@/lib/types";
 const NAV = [
   { seg: "", label: "Dashboard" },
   { seg: "mailboxes", label: "Mailboxes" },
+  { seg: "contacts", label: "Contacts" },
   { seg: "leads", label: "Leads" },
   { seg: "campaigns", label: "Campaigns" },
   { seg: "approvals", label: "Approvals" },

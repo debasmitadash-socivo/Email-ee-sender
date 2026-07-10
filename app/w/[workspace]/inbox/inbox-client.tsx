@@ -22,16 +22,24 @@ interface PositiveRow {
   leads: { email: string; first_name: string | null; last_name: string | null; company: string | null };
 }
 
+const TEMPS = [
+  { key: "warm", label: "🟢 Warm" },
+  { key: "neutral", label: "🟡 Neutral" },
+  { key: "rejected", label: "🔴 Rejected" },
+] as const;
+
 export function InboxClient({
   slug,
   messages,
   positives,
   activeCategory,
+  activeTemp,
 }: {
   slug: string;
   messages: Message[];
   positives: PositiveRow[];
   activeCategory: string | null;
+  activeTemp: string | null;
 }) {
   const router = useRouter();
   const [selected, setSelected] = useState<Message | null>(null);
@@ -39,8 +47,22 @@ export function InboxClient({
   return (
     <div className="grid lg:grid-cols-[1fr_320px] gap-6">
       <div>
+        <div className="flex gap-1.5 mb-2 flex-wrap">
+          <FilterChip
+            label="All"
+            active={!activeCategory && !activeTemp}
+            onClick={() => router.push(`/w/${slug}/inbox`)}
+          />
+          {TEMPS.map((t) => (
+            <FilterChip
+              key={t.key}
+              label={t.label}
+              active={activeTemp === t.key}
+              onClick={() => router.push(`/w/${slug}/inbox?temp=${t.key}`)}
+            />
+          ))}
+        </div>
         <div className="flex gap-1.5 mb-4 flex-wrap">
-          <FilterChip label="All" active={!activeCategory} onClick={() => router.push(`/w/${slug}/inbox`)} />
           {CATEGORIES.map((c) => (
             <FilterChip
               key={c}
