@@ -1,20 +1,10 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
 import { Button, Input, Label, Card } from "@/components/ui";
-
-function slugify(s: string) {
-  return s
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "")
-    .slice(0, 40);
-}
 
 export default function NewWorkspacePage() {
   const router = useRouter();
-  const supabase = createClient();
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -23,29 +13,18 @@ export default function NewWorkspacePage() {
     e.preventDefault();
     setBusy(true);
     setError(null);
-    const slug = slugify(name) || `ws-${Date.now()}`;
-    const { data: ws, error: wsErr } = await supabase
-      .from("workspaces")
-      .insert({ name, slug })
-      .select()
-      .single();
-    if (wsErr || !ws) {
-      setBusy(false);
-      setError(wsErr?.message ?? "Could not create workspace");
-      return;
-    }
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    const { error: memErr } = await supabase
-      .from("workspace_members")
-      .insert({ workspace_id: ws.id, user_id: user!.id, role: "admin" });
+    const res = await fetch("/api/workspaces", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+    const data = await res.json();
     setBusy(false);
-    if (memErr) {
-      setError(memErr.message);
+    if (!res.ok) {
+      setError(data.error ?? "Could not create workspace");
       return;
     }
-    router.push(`/w/${slug}`);
+    router.push(`/w/${data.slug}`);
     router.refresh();
   }
 
