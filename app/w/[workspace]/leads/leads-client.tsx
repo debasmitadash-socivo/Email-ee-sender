@@ -473,6 +473,40 @@ function ImportWizard({
 }
 
 function LeadDrawer({ lead, slug, onClose }: { lead: Lead; slug: string; onClose: () => void }) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [formData, setFormData] = useState({
+    first_name: lead.first_name || "",
+    last_name: lead.last_name || "",
+    company: lead.company || "",
+    title: lead.title || "",
+    linkedin_url: lead.linkedin_url || "",
+    timezone: lead.timezone || "",
+  });
+  const [busy, setBusy] = useState(false);
+
+  async function saveLead() {
+    if (!isEditing) return;
+    setBusy(true);
+    await fetch(`/api/leads/${lead.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(formData),
+    });
+    setBusy(false);
+    setIsEditing(false);
+    // In real app, would refresh or optimistically update
+    window.location.reload();
+  }
+
+  async function deleteLead() {
+    if (!confirm("Delete this lead? This cannot be undone.")) return;
+    const res = await fetch(`/api/leads/${lead.id}`, { method: "DELETE" });
+    if (res.ok) {
+      onClose();
+      window.location.reload();
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-50" onClick={onClose}>
       <div className="absolute inset-0 bg-ink/20" />
@@ -486,37 +520,107 @@ function LeadDrawer({ lead, slug, onClose }: { lead: Lead; slug: string; onClose
             Close
           </button>
         </div>
-        <dl className="space-y-3 text-sm">
-          {(
-            [
-              ["Name", [lead.first_name, lead.last_name].filter(Boolean).join(" ")],
-              ["Company", lead.company],
-              ["Domain", lead.domain],
-              ["Title", lead.title],
-              ["LinkedIn", lead.linkedin_url],
-              ["Timezone", lead.timezone],
-              ["Buckets / tags", (lead.tags ?? []).join(", ")],
-              ["Verification", `${lead.verify_status} (${lead.verify_provider ?? "—"})`],
-            ] as [string, string | null | undefined][]
-          ).map(([k, v]) => (
-            <div key={k}>
-              <dt className="text-muted text-xs">{k}</dt>
-              <dd>{v || "—"}</dd>
-            </div>
-          ))}
-          {Object.keys(lead.custom ?? {}).length > 0 && (
-            <div>
-              <dt className="text-muted text-xs">Custom fields</dt>
-              <dd>
-                <pre className="text-xs bg-bg border border-border rounded p-2 mt-1 overflow-x-auto">
-                  {JSON.stringify(lead.custom, null, 2)}
-                </pre>
-              </dd>
-            </div>
+
+        <div className="space-y-3 text-sm mb-6">
+          {isEditing ? (
+            <>
+              <div>
+                <label className="text-xs text-muted block mb-1">First name</label>
+                <Input
+                  value={formData.first_name}
+                  onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="text-xs text-muted block mb-1">Last name</label>
+                <Input
+                  value={formData.last_name}
+                  onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="text-xs text-muted block mb-1">Company</label>
+                <Input
+                  value={formData.company}
+                  onChange={(e) => setFormData({ ...formData, company: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="text-xs text-muted block mb-1">Title</label>
+                <Input
+                  value={formData.title}
+                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="text-xs text-muted block mb-1">LinkedIn URL</label>
+                <Input
+                  value={formData.linkedin_url}
+                  onChange={(e) => setFormData({ ...formData, linkedin_url: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="text-xs text-muted block mb-1">Timezone</label>
+                <Input
+                  value={formData.timezone}
+                  onChange={(e) => setFormData({ ...formData, timezone: e.target.value })}
+                  placeholder="e.g. America/New_York"
+                />
+              </div>
+              <div className="flex gap-2 pt-2">
+                <Button onClick={saveLead} disabled={busy} size="sm">
+                  {busy ? "…" : "Save"}
+                </Button>
+                <Button variant="ghost" onClick={() => setIsEditing(false)} size="sm">
+                  Cancel
+                </Button>
+              </div>
+            </>
+          ) : (
+            <>
+              <dl className="space-y-3">
+                {(
+                  [
+                    ["Name", [lead.first_name, lead.last_name].filter(Boolean).join(" ")],
+                    ["Company", lead.company],
+                    ["Domain", lead.domain],
+                    ["Title", lead.title],
+                    ["LinkedIn", lead.linkedin_url],
+                    ["Timezone", lead.timezone],
+                    ["Tags", (lead.tags ?? []).join(", ")],
+                    ["Verification", `${lead.verify_status} (${lead.verify_provider ?? "—"})`],
+                  ] as [string, string | null | undefined][]
+                ).map(([k, v]) => (
+                  <div key={k}>
+                    <dt className="text-muted text-xs">{k}</dt>
+                    <dd className="font-medium">{v || "—"}</dd>
+                  </div>
+                ))}
+              </dl>
+              <div className="flex gap-2 pt-3 border-t border-border">
+                <Button onClick={() => setIsEditing(true)} variant="outline" size="sm">
+                  Edit
+                </Button>
+                <Button onClick={deleteLead} variant="danger" size="sm">
+                  Delete
+                </Button>
+              </div>
+            </>
           )}
-        </dl>
+        </div>
+
+        {Object.keys(lead.custom ?? {}).length > 0 && (
+          <div className="mt-6">
+            <dt className="text-muted text-xs mb-1">Custom fields</dt>
+            <pre className="text-xs bg-bg border border-border rounded p-2 overflow-x-auto">
+              {JSON.stringify(lead.custom, null, 2)}
+            </pre>
+          </div>
+        )}
+
         <LeadResearchPanel leadId={lead.id} />
-        <div className="mt-6">
+
+        <div className="mt-6 pt-6 border-t border-border">
           <Link href={`/w/${slug}/inbox?lead=${lead.id}`} className="text-sm text-secondary hover:underline">
             View conversation timeline →
           </Link>

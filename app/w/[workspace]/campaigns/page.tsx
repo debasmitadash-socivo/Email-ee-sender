@@ -2,6 +2,7 @@ import { requireWorkspace } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader, Chip, stateTone, Empty, Table, Th, Td } from "@/components/ui";
 import { NewCampaignButton } from "./new-campaign";
+import { CampaignActions } from "./campaign-actions";
 import Link from "next/link";
 
 export default async function CampaignsPage({ params }: { params: { workspace: string } }) {
@@ -28,6 +29,7 @@ export default async function CampaignsPage({ params }: { params: { workspace: s
               <Th>Status</Th>
               <Th>Leads</Th>
               <Th>Created</Th>
+              <Th>Actions</Th>
             </tr>
           </thead>
           <tbody>
@@ -43,6 +45,9 @@ export default async function CampaignsPage({ params }: { params: { workspace: s
                 </Td>
                 <Td>{(c.campaign_leads as { count: number }[] | null)?.[0]?.count ?? 0}</Td>
                 <Td>{new Date(c.created_at).toLocaleDateString("en-GB")}</Td>
+                <Td>
+                  <CampaignActions campaignId={c.id} campaignStatus={c.status} slug={workspace.slug} />
+                </Td>
               </tr>
             ))}
           </tbody>
