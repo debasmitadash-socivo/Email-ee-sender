@@ -144,19 +144,21 @@ export function stateTone(
 export function Table({ children }: { children: React.ReactNode }) {
   return (
     <div className="card overflow-x-auto">
-      <table className="w-full text-sm">{children}</table>
+      <table className="w-full text-sm data-table">{children}</table>
     </div>
   );
 }
 
 export function Th({ children }: { children?: React.ReactNode }) {
   return (
-    <th className="text-left font-medium text-muted px-4 py-3 border-b border-border">{children}</th>
+    <th className="text-left font-semibold text-muted text-xs uppercase tracking-wide px-4 py-3 border-b border-border bg-bg/60">
+      {children}
+    </th>
   );
 }
 
 export function Td({ children, className }: { children?: React.ReactNode; className?: string }) {
-  return <td className={cx("px-4 py-3 border-b border-border align-top", className)}>{children}</td>;
+  return <td className={cx("px-4 py-3.5 border-b border-border align-top", className)}>{children}</td>;
 }
 
 export function Empty({ children, icon = "✨" }: { children: React.ReactNode; icon?: string }) {
@@ -170,14 +172,19 @@ export function Empty({ children, icon = "✨" }: { children: React.ReactNode; i
 
 export function PageHeader({
   title,
+  description,
   action,
 }: {
   title: string;
+  description?: string;
   action?: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center justify-between mb-6">
-      <h1 className="text-xl font-semibold">{title}</h1>
+    <div className="flex items-start justify-between mb-8 gap-4 flex-wrap">
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
+        {description && <p className="text-sm text-muted mt-1.5 max-w-2xl">{description}</p>}
+      </div>
       {action}
     </div>
   );

@@ -60,6 +60,22 @@ export function LeadsClient({
     setSelected(new Set());
     router.refresh();
   }
+
+  async function addToList(listId: string | null, newName?: string) {
+    if (!selected.size) return;
+    await fetch("/api/leads/tag", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        lead_ids: [...selected],
+        list_id: listId ?? undefined,
+        new_list_name: newName,
+        workspace_id: workspaceId,
+      }),
+    });
+    setSelected(new Set());
+    router.refresh();
+  }
   function goto(params: Record<string, string | null>) {
     const sp = new URLSearchParams();
     if (params.list ?? activeList) sp.set("list", (params.list ?? activeList)!);
@@ -157,6 +173,27 @@ export function LeadsClient({
             <Button variant="outline" onClick={() => applyTag(true)} disabled={!tagInput.trim()}>
               Remove tag
             </Button>
+            <span className="text-muted text-xs mx-1">or</span>
+            <Select
+              defaultValue=""
+              onChange={(e) => {
+                if (e.target.value === "__new__") {
+                  const name = window.prompt("Name for the new list:");
+                  if (name?.trim()) addToList(null, name.trim());
+                } else if (e.target.value) {
+                  addToList(e.target.value);
+                }
+                e.target.value = "";
+              }}
+            >
+              <option value="">Add to list…</option>
+              {lists.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.name}
+                </option>
+              ))}
+              <option value="__new__">+ New list…</option>
+            </Select>
             <button className="text-xs text-muted hover:text-ink ml-2" onClick={() => setSelected(new Set())}>
               clear selection
             </button>

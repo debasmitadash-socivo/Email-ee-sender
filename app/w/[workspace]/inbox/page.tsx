@@ -54,7 +54,10 @@ export default async function InboxPage({
 
   return (
     <div>
-      <PageHeader title="Master inbox" />
+      <PageHeader
+        title="Master inbox"
+        description="Replies to your outreach only, auto-categorised with a buying-signal score — newsletters and general mail never appear here. Reply inline; it threads from the original mailbox."
+      />
       <InboxClient
         slug={workspace.slug}
         /* eslint-disable @typescript-eslint/no-explicit-any */

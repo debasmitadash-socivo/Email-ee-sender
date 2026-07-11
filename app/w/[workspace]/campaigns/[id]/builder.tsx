@@ -44,6 +44,7 @@ export function CampaignBuilder(props: {
   const [mailboxIds, setMailboxIds] = useState<string[]>(props.attachedMailboxIds);
   const [listId, setListId] = useState("");
   const [audienceTag, setAudienceTag] = useState("");
+  const [testEmails, setTestEmails] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
   const [launchFailures, setLaunchFailures] = useState<string[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
@@ -81,6 +82,7 @@ export function CampaignBuilder(props: {
         mailbox_ids: mailboxIds,
         list_id: listId || undefined,
         tag: !listId && audienceTag ? audienceTag : undefined,
+        test_emails: testEmails ? testEmails.split(",").map((e) => e.trim()).filter(Boolean) : undefined,
       }),
     });
     const data = await res.json();
@@ -126,10 +128,16 @@ export function CampaignBuilder(props: {
 
   async function seedTest() {
     setBusy("seed");
+    setLaunchFailures([]);
     const res = await fetch(`/api/campaigns/${campaign.id}/seed-test`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
     const data = await res.json();
     setBusy(null);
-    setMsg(res.ok ? `Seed test: ${JSON.stringify(data.results)}` : `Seed test failed: ${data.error}`);
+    if (res.ok) {
+      const lines = Object.entries(data.results as Record<string, string>).map(([to, r]) => `${to}: ${r}`);
+      setMsg(`Seed test sent — check which folder it lands in (inbox vs spam). ${lines.join(" · ")}`);
+    } else {
+      setLaunchFailures([`Seed test: ${data.error}`]);
+    }
   }
 
   return (
@@ -149,8 +157,13 @@ export function CampaignBuilder(props: {
           <a href={`/w/${props.slug}/campaigns/${campaign.id}/analytics`} className="text-sm text-secondary hover:underline mr-2">
             Analytics
           </a>
-          <Button variant="outline" onClick={seedTest} disabled={busy === "seed"}>
-            {busy === "seed" ? "…" : "Seed test"}
+          <Button
+            variant="outline"
+            onClick={seedTest}
+            disabled={busy === "seed"}
+            title="Sends step 1 of this campaign to your own seed inboxes (set them on the Knowledge page) so you can see whether it lands in inbox or spam before going live. Never counts in analytics."
+          >
+            {busy === "seed" ? "Sending…" : "Seed test"}
           </Button>
           {campaign.status === "running" ? (
             <Button variant="outline" onClick={() => setStatus("paused")}>
@@ -342,16 +355,39 @@ export function CampaignBuilder(props: {
                 {!props.mailboxes.length && <p className="text-sm text-muted">Connect a mailbox first.</p>}
               </div>
             </div>
+            <div className="rounded-lg border border-secondary/30 bg-secondary/5 p-4">
+              <Label>🧪 Quick test audience (2–5 of your own emails — no import, no verification)</Label>
+              <Input
+                placeholder="you@gmail.com, colleague@outlook.com"
+                value={testEmails}
+                onChange={(e) => setTestEmails(e.target.value)}
+              />
+              <p className="text-xs text-muted mt-1">
+                Perfect for testing the flow or A/B-testing formats on yourself before touching real leads.
+                They're tagged <code>test</code> so you can find and remove them later.
+              </p>
+            </div>
             <div>
               <Label>Add leads from a list (invalid-verification leads are excluded)</Label>
-              <Select value={listId} onChange={(e) => { setListId(e.target.value); if (e.target.value) setAudienceTag(""); }}>
-                <option value="">— choose a list —</option>
-                {props.lists.map((l) => (
-                  <option key={l.id} value={l.id}>
-                    {l.name}
-                  </option>
-                ))}
-              </Select>
+              {props.lists.length ? (
+                <Select value={listId} onChange={(e) => { setListId(e.target.value); if (e.target.value) setAudienceTag(""); }}>
+                  <option value="">— choose a list —</option>
+                  {props.lists.map((l) => (
+                    <option key={l.id} value={l.id}>
+                      {l.name}
+                    </option>
+                  ))}
+                </Select>
+              ) : (
+                <p className="text-xs text-muted">
+                  No lists yet — lists are created on the{" "}
+                  <a href={`/w/${props.slug}/leads`} className="text-secondary hover:underline">
+                    Leads page
+                  </a>{" "}
+                  (import a CSV into a new list, or select leads → "Add to list"). Or just use the test
+                  audience above.
+                </p>
+              )}
             </div>
             {props.tags.length > 0 && (
               <div>

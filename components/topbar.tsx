@@ -35,10 +35,12 @@ export function Topbar({
   }
 
   return (
-    <header className="border-b border-border bg-surface">
+    <header className="sticky top-0 z-40 border-b border-border bg-surface/85 backdrop-blur-md">
       <div className="mx-auto max-w-7xl px-6 flex items-center h-14 gap-6">
-        <span className="font-semibold tracking-tight text-sm whitespace-nowrap flex items-center gap-2">
-          <span className="inline-block h-2.5 w-2.5 rounded-full bg-gradient-to-br from-primary to-secondary" />
+        <span className="font-bold tracking-tight text-[15px] whitespace-nowrap flex items-center gap-2">
+          <span className="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-secondary text-white text-[11px] font-bold shadow-sm">
+            S
+          </span>
           Socivo
         </span>
         <select

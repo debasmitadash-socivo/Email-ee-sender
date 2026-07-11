@@ -184,17 +184,24 @@ function SignatureEditor({ mailbox, onSaved }: { mailbox: Mailbox; onSaved: () =
 
   if (!open) {
     return (
-      <button
-        className="text-xs text-secondary hover:underline mt-4"
-        onClick={() => setOpen(true)}
-      >
-        {mailbox.signature_html ? "Edit closing signature" : "+ Add closing signature"}
-      </button>
+      <div className="mt-4 pt-4 border-t border-border flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <div className="text-sm font-medium">✍️ Email signature</div>
+          <div className="text-xs text-muted mt-0.5">
+            {mailbox.signature_html
+              ? `Set: "${mailbox.signature_html.replace(/<br\s*\/?>/gi, " · ").replace(/<[^>]+>/g, "").slice(0, 60)}…"`
+              : "Not set — paste your name, title and details; it's appended to every email from this inbox."}
+          </div>
+        </div>
+        <Button variant="outline" onClick={() => setOpen(true)}>
+          {mailbox.signature_html ? "Edit signature" : "Add signature"}
+        </Button>
+      </div>
     );
   }
   return (
     <div className="mt-4 pt-4 border-t border-border">
-      <div className="text-sm font-medium mb-2">Closing signature</div>
+      <div className="text-sm font-medium mb-2">✍️ Email signature</div>
       <p className="text-xs text-muted mb-2">
         Appended after every email body, before the compliance footer (unsubscribe + identity). Plain
         text, one line per line — e.g. your name, title, phone. HTML emails only (no effect in plain-text

@@ -15,7 +15,11 @@ export default async function CampaignsPage({ params }: { params: { workspace: s
 
   return (
     <div>
-      <PageHeader title="Campaigns" action={<NewCampaignButton workspaceId={workspace.id} slug={workspace.slug} />} />
+      <PageHeader
+        title="Campaigns"
+        description="Bulk sequences to a list or tag bucket of leads — A/B variants, scheduling windows, and per-step analytics. Use a quick test audience of your own emails to try formats safely."
+        action={<NewCampaignButton workspaceId={workspace.id} slug={workspace.slug} />}
+      />
       {campaigns?.length ? (
         <Table>
           <thead>

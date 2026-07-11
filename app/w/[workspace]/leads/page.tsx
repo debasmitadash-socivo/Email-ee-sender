@@ -37,7 +37,10 @@ export default async function LeadsPage({
 
   return (
     <div>
-      <PageHeader title="Leads" />
+      <PageHeader
+        title="Leads"
+        description="Your raw prospect database. Import CSVs (Apollo, Sales Navigator, any format), verify emails, then organise people into lists and tag them into buckets — Campaigns pull their audience from here."
+      />
       <LeadsClient
         workspaceId={workspace.id}
         slug={workspace.slug}

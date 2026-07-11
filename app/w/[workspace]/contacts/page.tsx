@@ -48,7 +48,10 @@ export default async function ContactsPage({ params }: { params: { workspace: st
 
   return (
     <div>
-      <PageHeader title="Contacts" />
+      <PageHeader
+        title="Contacts"
+        description="One-at-a-time outreach (your CRM). Add a single person, pick a template, set the follow-up cadence — the engine sends, chases, and stops the moment they reply. For sending to a whole list, use Campaigns instead."
+      />
       <ContactsClient
         workspaceId={workspace.id}
         slug={workspace.slug}

@@ -18,11 +18,10 @@ export default async function ApprovalsPage({ params }: { params: { workspace: s
 
   return (
     <div>
-      <PageHeader title="Approval queue" />
-      <p className="text-sm text-muted mb-6">
-        The first {`{approve_first_n}`} drafts per campaign need a human yes. After that, passing drafts
-        auto-approve. Edits here are what actually gets sent.
-      </p>
+      <PageHeader
+        title="Approval queue"
+        description="AI-personalised drafts wait here for your yes before anything sends. Edit freely — what you approve is exactly what goes out."
+      />
       {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
       <ApprovalQueue drafts={(drafts ?? []) as any[]} />
     </div>

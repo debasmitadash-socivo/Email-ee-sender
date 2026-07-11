@@ -2,78 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireMember } from "@/lib/api-guard";
 import { runChain, ChainExhaustedError } from "@/lib/providers/run-chain";
-import { aiModels } from "@/config/providers";
+import { aiComplete, parseAiJson } from "@/lib/ai";
 import type { KnowledgeProfile } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
-
-async function aiComplete(provider: string, apiKey: string, system: string, user: string): Promise<string> {
-  if (provider === "gemini") {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${aiModels.gemini}:generateContent?key=${apiKey}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: system }] },
-          contents: [{ role: "user", parts: [{ text: user }] }],
-          generationConfig: { temperature: 0.3, maxOutputTokens: 1024 },
-        }),
-      }
-    );
-    if (!res.ok) throw new Error(`gemini ${res.status}: ${await res.text()}`);
-    const data = await res.json();
-    return data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
-  }
-  if (provider === "groq" || provider === "openrouter") {
-    const url =
-      provider === "groq"
-        ? "https://api.groq.com/openai/v1/chat/completions"
-        : "https://openrouter.ai/api/v1/chat/completions";
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: aiModels[provider],
-        temperature: 0.3,
-        max_tokens: 1024,
-        messages: [
-          { role: "system", content: system },
-          { role: "user", content: user },
-        ],
-      }),
-    });
-    if (!res.ok) throw new Error(`${provider} ${res.status}: ${await res.text()}`);
-    const data = await res.json();
-    return data.choices?.[0]?.message?.content ?? "";
-  }
-  if (provider === "anthropic") {
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: aiModels.anthropic,
-        max_tokens: 1024,
-        temperature: 0.3,
-        system,
-        messages: [{ role: "user", content: user }],
-      }),
-    });
-    if (!res.ok) throw new Error(`anthropic ${res.status}: ${await res.text()}`);
-    const data = await res.json();
-    return data.content?.[0]?.text ?? "";
-  }
-  throw new Error(`unknown provider ${provider}`);
-}
-
-function parseJson<T>(text: string): T {
-  const cleaned = text.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "");
-  const start = cleaned.indexOf("{");
-  const end = cleaned.lastIndexOf("}");
-  if (start === -1 || end === -1) throw new Error("no JSON object in response");
-  return JSON.parse(cleaned.slice(start, end + 1));
-}
 
 // Fill the Knowledge profile from a free-text company description (and
 // optionally a fetched site page). No invented facts beyond what's given —
@@ -140,17 +73,17 @@ UK English.`;
     const { result } = await runChain(admin, "ai_brief", async (provider, apiKey) => {
       const raw = await aiComplete(provider, apiKey, system, user);
       try {
-        return parseJson<Partial<KnowledgeProfile>>(raw);
+        return parseAiJson<Partial<KnowledgeProfile>>(raw);
       } catch {
         const retry = await aiComplete(provider, apiKey, "Respond with strict JSON only, nothing else.", raw);
-        return parseJson<Partial<KnowledgeProfile>>(retry);
+        return parseAiJson<Partial<KnowledgeProfile>>(retry);
       }
     });
     return NextResponse.json({ ok: true, profile: result });
   } catch (err) {
     if (err instanceof ChainExhaustedError) {
       return NextResponse.json(
-        { error: "No AI provider key configured yet. Add a free Gemini/Groq/OpenRouter key in your deployment's env vars to use autofill." },
+        { error: "No AI key available — add a free Gemini key in Settings → API Keys, then try again." },
         { status: 422 }
       );
     }

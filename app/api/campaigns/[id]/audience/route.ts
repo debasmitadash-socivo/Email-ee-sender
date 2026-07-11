@@ -12,6 +12,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     lead_ids?: string[];
     mailbox_ids?: string[];
     exclude_invalid?: boolean;
+    test_emails?: string[]; // quick test audience: up to 5 addresses, enrolled directly, tagged 'test'
   };
 
   const { data: campaign } = await supabase
@@ -32,8 +33,28 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     }
   }
 
-  // leads
+  // quick test audience: create/find leads for the given emails, tag 'test',
+  // enrol directly — no CSV, no verification hoop, capped at 5
   let leadIds = body.lead_ids ?? [];
+  if (body.test_emails?.length) {
+    const emails = [...new Set(body.test_emails.map((e) => e.trim().toLowerCase()).filter((e) => e.includes("@")))].slice(0, 5);
+    if (emails.length) {
+      const { data: testLeads, error } = await supabase
+        .from("leads")
+        .upsert(
+          emails.map((email) => ({
+            workspace_id: campaign.workspace_id,
+            email,
+            domain: email.split("@")[1],
+            tags: ["test"],
+          })),
+          { onConflict: "workspace_id,email" }
+        )
+        .select("id");
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      leadIds = [...leadIds, ...(testLeads ?? []).map((l) => l.id)];
+    }
+  }
   if (body.list_id) {
     const { data: listLeads, error } = await supabase
       .from("leads")

@@ -21,6 +21,7 @@ export default async function MailboxesPage({ params }: { params: { workspace: s
     <div>
       <PageHeader
         title="Mailboxes"
+        description="The inboxes you send from. Each has a warm-up ramp, daily cap, health score, DNS checker and its own email signature."
         action={
           <div className="flex gap-2">
             <a

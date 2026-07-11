@@ -16,18 +16,49 @@ interface Template {
 export function TemplatesClient({ workspaceId, templates }: { workspaceId: string; templates: Template[] }) {
   const router = useRouter();
   const [editing, setEditing] = useState<Template | "new" | null>(null);
+  const [generated, setGenerated] = useState<Partial<Template> | null>(null);
+  const [genBusy, setGenBusy] = useState<string | null>(null);
+  const [genErr, setGenErr] = useState<string | null>(null);
+
+  async function generate(style: string) {
+    setGenBusy(style);
+    setGenErr(null);
+    const res = await fetch("/api/templates/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ workspace_id: workspaceId, style }),
+    });
+    const data = await res.json();
+    setGenBusy(null);
+    if (!res.ok) return setGenErr(data.error);
+    setGenerated(data.template);
+    setEditing("new");
+  }
 
   return (
     <div>
-      <div className="mb-6">
-        <Button onClick={() => setEditing("new")}>New template</Button>
+      <div className="mb-6 flex items-center gap-2 flex-wrap">
+        <Button onClick={() => { setGenerated(null); setEditing("new"); }}>New template</Button>
+        <span className="text-xs text-muted ml-2">Generate from your Knowledge profile:</span>
+        {[
+          ["direct", "✨ Direct"],
+          ["value", "✨ Value-first"],
+          ["question", "✨ Question-led"],
+        ].map(([style, label]) => (
+          <Button key={style} variant="outline" onClick={() => generate(style)} disabled={!!genBusy}>
+            {genBusy === style ? "Writing…" : label}
+          </Button>
+        ))}
+        {genErr && <p className="text-xs text-danger w-full">{genErr}</p>}
       </div>
       {editing && (
         <TemplateEditor
           workspaceId={workspaceId}
-          template={editing === "new" ? null : editing}
+          template={editing === "new" ? (generated ? ({ ...generated, id: "", workspace_id: workspaceId, ai_slots: { ai_icebreaker: { instruction: "One specific, sourced opening line about this lead.", max_words: 30 } } } as Template) : null) : editing}
+          isDraft={editing === "new" && !!generated}
           onClose={() => {
             setEditing(null);
+            setGenerated(null);
             router.refresh();
           }}
         />
@@ -65,10 +96,12 @@ export function TemplatesClient({ workspaceId, templates }: { workspaceId: strin
 function TemplateEditor({
   workspaceId,
   template,
+  isDraft = false,
   onClose,
 }: {
   workspaceId: string;
   template: Template | null;
+  isDraft?: boolean;
   onClose: () => void;
 }) {
   const supabase = createClient();
@@ -90,9 +123,10 @@ function TemplateEditor({
     }
     setBusy(true);
     const row = { workspace_id: workspaceId, name, subject, body, ai_slots };
-    const { error } = template
-      ? await supabase.from("templates").update(row).eq("id", template.id)
-      : await supabase.from("templates").insert(row);
+    const { error } =
+      template && template.id && !isDraft
+        ? await supabase.from("templates").update(row).eq("id", template.id)
+        : await supabase.from("templates").insert(row);
     setBusy(false);
     if (error) setError(error.message);
     else onClose();
@@ -133,7 +167,7 @@ function TemplateEditor({
           <Button onClick={save} disabled={busy || !name}>
             {busy ? "…" : "Save template"}
           </Button>
-          {template && (
+          {template && template.id && !isDraft && (
             <Button variant="danger" onClick={remove}>
               Delete
             </Button>
