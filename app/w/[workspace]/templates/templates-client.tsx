@@ -10,6 +10,8 @@ interface Template {
   name: string;
   subject: string;
   body: string;
+  closing_line?: string;
+  signature_html?: string;
   ai_slots: Record<string, { instruction: string; max_words?: number }>;
 }
 
@@ -108,9 +110,12 @@ function TemplateEditor({
   const [name, setName] = useState(template?.name ?? "");
   const [subject, setSubject] = useState(template?.subject ?? "");
   const [body, setBody] = useState(template?.body ?? "");
+  const [closingLine, setClosingLine] = useState(template?.closing_line ?? "");
+  const [signatureHtml, setSignatureHtml] = useState(template?.signature_html ?? "");
   const [slotsJson, setSlotsJson] = useState(JSON.stringify(template?.ai_slots ?? {}, null, 2));
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
 
   async function save() {
     setError(null);
@@ -122,7 +127,7 @@ function TemplateEditor({
       return;
     }
     setBusy(true);
-    const row = { workspace_id: workspaceId, name, subject, body, ai_slots };
+    const row = { workspace_id: workspaceId, name, subject, body, closing_line: closingLine || null, signature_html: signatureHtml || null, ai_slots };
     const { error } =
       template && template.id && !isDraft
         ? await supabase.from("templates").update(row).eq("id", template.id)
@@ -139,44 +144,82 @@ function TemplateEditor({
   }
 
   return (
-    <Card className="mb-6">
-      <div className="space-y-3 max-w-2xl">
-        <div>
-          <Label>Name</Label>
-          <Input value={name} onChange={(e) => setName(e.target.value)} />
-        </div>
-        <div>
-          <Label>Subject</Label>
-          <Input value={subject} onChange={(e) => setSubject(e.target.value)} />
-        </div>
-        <div>
-          <Label>Body</Label>
-          <Textarea rows={8} value={body} onChange={(e) => setBody(e.target.value)} />
-        </div>
-        <div>
-          <Label>AI slots (JSON)</Label>
-          <Textarea
-            rows={5}
-            value={slotsJson}
-            onChange={(e) => setSlotsJson(e.target.value)}
-            placeholder={'{ "ai_icebreaker": { "instruction": "One specific, sourced opening line.", "max_words": 30 } }'}
-          />
-        </div>
-        {error && <p className="text-sm text-danger">{error}</p>}
-        <div className="flex gap-2">
-          <Button onClick={save} disabled={busy || !name}>
-            {busy ? "…" : "Save template"}
-          </Button>
-          {template && template.id && !isDraft && (
-            <Button variant="danger" onClick={remove}>
-              Delete
+    <div className="space-y-4 mb-6">
+      <Card className="max-w-2xl">
+        <div className="space-y-3">
+          <div>
+            <Label>Name</Label>
+            <Input value={name} onChange={(e) => setName(e.target.value)} />
+          </div>
+          <div>
+            <Label>Subject</Label>
+            <Input value={subject} onChange={(e) => setSubject(e.target.value)} />
+          </div>
+          <div>
+            <Label>Body</Label>
+            <Textarea rows={8} value={body} onChange={(e) => setBody(e.target.value)} />
+          </div>
+          <div>
+            <Label>Closing line (e.g. "Best," or "Looking forward,") — optional</Label>
+            <Input value={closingLine} onChange={(e) => setClosingLine(e.target.value)} />
+          </div>
+          <div>
+            <Label>Signature HTML — optional (will override mailbox signature)</Label>
+            <Textarea
+              rows={3}
+              value={signatureHtml}
+              onChange={(e) => setSignatureHtml(e.target.value)}
+              placeholder="<p>John Doe<br>Founder, Acme Inc<br>john@acme.com</p>"
+            />
+          </div>
+          <div>
+            <Label>AI slots (JSON)</Label>
+            <Textarea
+              rows={5}
+              value={slotsJson}
+              onChange={(e) => setSlotsJson(e.target.value)}
+              placeholder={'{ "ai_icebreaker": { "instruction": "One specific, sourced opening line.", "max_words": 30 } }'}
+            />
+          </div>
+          {error && <p className="text-sm text-danger">{error}</p>}
+          <div className="flex gap-2">
+            <Button onClick={save} disabled={busy || !name}>
+              {busy ? "…" : "Save template"}
             </Button>
-          )}
-          <Button variant="ghost" onClick={onClose}>
-            Cancel
-          </Button>
+            {template && template.id && !isDraft && (
+              <Button variant="danger" onClick={remove}>
+                Delete
+              </Button>
+            )}
+            <Button variant="ghost" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button variant="outline" onClick={() => setShowPreview(!showPreview)}>
+              {showPreview ? "Hide" : "Show"} preview
+            </Button>
+          </div>
         </div>
-      </div>
-    </Card>
+      </Card>
+
+      {showPreview && (
+        <Card className="max-w-2xl">
+          <div className="text-sm font-medium mb-3">Email preview (copyable)</div>
+          <div className="border border-border rounded bg-white p-4 text-sm space-y-2 font-mono text-xs overflow-x-auto">
+            <div>
+              <strong>Subject:</strong> {subject || "(empty)"}
+            </div>
+            <div className="h-px bg-border my-2" />
+            <div className="whitespace-pre-wrap text-ink">{body || "(empty)"}</div>
+            {closingLine && <div className="whitespace-pre-wrap text-ink mt-3">{closingLine}</div>}
+            {signatureHtml && (
+              <div className="mt-3 pt-3 border-t border-border">
+                <div dangerouslySetInnerHTML={{ __html: signatureHtml }} className="text-xs" />
+              </div>
+            )}
+          </div>
+          <p className="text-xs text-muted mt-2">Select and copy the text above to paste into your email client or sales tool.</p>
+        </Card>
+      )}
+    </div>
   );
 }

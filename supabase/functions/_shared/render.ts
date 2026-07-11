@@ -65,9 +65,10 @@ export function assembleBody(args: AssembleArgs): { text: string; html?: string 
   const footerLines: string[] = [];
   if (args.footerIdentity) footerLines.push(args.footerIdentity);
   if (args.usTargeting && args.postalAddress) footerLines.push(args.postalAddress);
-  footerLines.push(`Don't want to hear from me again? Unsubscribe: ${args.unsubscribeUrl}`);
+  // Note: unsubscribe is conveyed via email header (List-Unsubscribe), not body text
+  // This keeps cold emails professional and removes newsletter-style "Don't want to hear from me?" language
 
-  const text = `${args.body.trim()}\n\n--\n${footerLines.join("\n")}`;
+  const text = footerLines.length ? `${args.body.trim()}\n\n--\n${footerLines.join("\n")}` : args.body.trim();
   if (args.plainText) return { text }; // no pixel in plain-text mode (per lint rules)
 
   const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -78,16 +79,12 @@ export function assembleBody(args: AssembleArgs): { text: string; html?: string 
       return `<a href="${wrapped}">${url}</a>`;
     });
   }
-  const htmlFooter = footerLines
-    .map((l) =>
-      l.includes(args.unsubscribeUrl)
-        ? `Don't want to hear from me again? <a href="${args.unsubscribeUrl}">Unsubscribe</a>`
-        : esc(l).replace(/\n/g, "<br>")
-    )
-    .join("<br>");
+  const htmlFooter = footerLines.map((l) => esc(l).replace(/\n/g, "<br>")).join("<br>");
   const pixel = args.trackingPixelUrl
     ? `<img src="${args.trackingPixelUrl}" width="1" height="1" alt="" style="display:none">`
     : "";
-  const html = `<div>${htmlBody}${args.signatureHtml ? `<br><br>${args.signatureHtml}` : ""}<br><br><span style="color:#6B6B76;font-size:12px">--<br>${htmlFooter}</span>${pixel}</div>`;
+  const html = `<div>${htmlBody}${args.signatureHtml ? `<br><br>${args.signatureHtml}` : ""}${
+    htmlFooter ? `<br><br><span style="color:#6B6B76;font-size:12px">--<br>${htmlFooter}</span>` : ""
+  }${pixel}</div>`;
   return { text, html };
 }

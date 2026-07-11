@@ -52,8 +52,9 @@ export function renderVars(
 }
 
 /**
- * Compliance assembly (§14): footer identity in every email, unsubscribe line
- * in every email, US postal address when the campaign targets the US.
+ * Compliance assembly (§14): footer identity in every email (required for cold email),
+ * US postal address when the campaign targets the US (CAN-SPAM requirement).
+ * Unsubscribe is handled via email List-Unsubscribe header (shows discreet chip in email clients).
  */
 export function assembleBody(args: {
   body: string;
@@ -66,20 +67,17 @@ export function assembleBody(args: {
   const footerLines: string[] = [];
   if (args.profile.footer_identity) footerLines.push(args.profile.footer_identity);
   if (args.usTargeting && args.profile.postal_address) footerLines.push(args.profile.postal_address);
-  footerLines.push(`Don't want to hear from me again? Unsubscribe: ${args.unsubscribeUrl}`);
+  // Note: unsubscribe is conveyed via email header (List-Unsubscribe), not body text
+  // This keeps cold emails professional and removes newsletter-style "Don't want to hear from me?" language
 
-  const text = `${args.body.trim()}\n\n--\n${footerLines.join("\n")}`;
+  const text = footerLines.length ? `${args.body.trim()}\n\n--\n${footerLines.join("\n")}` : args.body.trim();
   if (args.plainText) return { text };
 
   const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const htmlBody = esc(args.body.trim()).replace(/\n/g, "<br>");
-  const htmlFooter = footerLines
-    .map((l) =>
-      l.includes(args.unsubscribeUrl)
-        ? `Don't want to hear from me again? <a href="${args.unsubscribeUrl}">Unsubscribe</a>`
-        : esc(l).replace(/\n/g, "<br>")
-    )
-    .join("<br>");
-  const html = `<div>${htmlBody}${args.signatureHtml ? `<br><br>${args.signatureHtml}` : ""}<br><br><span style="color:#6B6B76;font-size:12px">--<br>${htmlFooter}</span></div>`;
+  const htmlFooter = footerLines.map((l) => esc(l).replace(/\n/g, "<br>")).join("<br>");
+  const html = `<div>${htmlBody}${args.signatureHtml ? `<br><br>${args.signatureHtml}` : ""}${
+    htmlFooter ? `<br><br><span style="color:#6B6B76;font-size:12px">--<br>${htmlFooter}</span>` : ""
+  }</div>`;
   return { text, html };
 }
