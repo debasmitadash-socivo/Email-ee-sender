@@ -3,6 +3,7 @@ import { requireWorkspace } from "@/lib/workspace";
 
 const TABS = [
   { seg: "", label: "Providers & Quotas" },
+  { seg: "keys", label: "API Keys" },
   { seg: "suppression", label: "Suppression" },
   { seg: "notifications", label: "Notifications" },
   { seg: "webhooks", label: "Webhooks" },

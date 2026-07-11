@@ -51,7 +51,6 @@ var chains = {
   ],
   linkedin: [{ provider: "apify", envKey: "APIFY_TOKEN", dailyQuota: 20 }]
 };
-var MAX_DAILY_FAILURES = 3;
 var aiModels = {
   gemini: "gemini-1.5-flash",
   groq: "llama-3.3-70b-versatile",
@@ -126,6 +125,32 @@ var bannedPhrases = [
   "touching base"
 ];
 
+// supabase/functions/_shared/crypto.ts
+function keyBytes() {
+  const hex = Deno.env.get("ENCRYPTION_KEY");
+  if (!hex || !/^[0-9a-fA-F]{64}$/.test(hex)) {
+    throw new Error("ENCRYPTION_KEY must be 64 hex characters");
+  }
+  const out = new Uint8Array(32);
+  for (let i = 0; i < 32; i++) out[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+  return out;
+}
+function b64decode(s) {
+  const bin = atob(s);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+async function aesKey() {
+  return crypto.subtle.importKey("raw", keyBytes(), { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
+}
+async function decrypt(payload) {
+  const buf = b64decode(payload);
+  const key = await aesKey();
+  const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv: buf.slice(0, 12) }, key, buf.slice(12));
+  return new TextDecoder().decode(pt);
+}
+
 // supabase/functions/_shared/providers.ts
 var ChainExhaustedError = class extends Error {
   constructor(capability) {
@@ -151,19 +176,56 @@ async function bumpUsage(db, provider, capability, field) {
     { onConflict: "provider,capability,day" }
   );
 }
+var today = () => (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+function isQuotaError(err) {
+  return /\b(429|402|quota|rate.?limit|resource.?exhausted|too many requests|insufficient|limit reached|exhaust)\b/i.test(
+    String(err)
+  );
+}
+async function candidatesFor(db, provider, envKey) {
+  const out = [];
+  const { data: rows } = await db.from("provider_keys").select("id, key_enc, exhausted_date, priority").eq("provider", provider).eq("active", true).order("priority");
+  for (const r of rows ?? []) {
+    if (r.exhausted_date === today()) continue;
+    try {
+      out.push({ key: await decrypt(r.key_enc), source: "db", id: r.id });
+    } catch {
+    }
+  }
+  if (envKey) out.push({ key: envKey, source: "env" });
+  return out;
+}
+async function markExhausted(db, provider, cand) {
+  if (cand.source === "db" && cand.id) {
+    await db.from("provider_keys").update({ exhausted_date: today() }).eq("id", cand.id);
+  }
+  const { error } = await db.from("alert_log").insert({ key: `keyexhausted:${provider}`, day: today() });
+  if (!error) {
+    const { data: workspaces } = await db.from("workspaces").select("id");
+    for (const ws of workspaces ?? []) {
+      await db.from("notification_queue").insert({
+        workspace_id: ws.id,
+        event: "provider_quota_exhausted",
+        payload: { provider, note: `${provider} hit its free daily limit \u2014 rotated to the next available key/provider.` }
+      });
+    }
+  }
+}
 async function runChain(db, capability, task) {
   for (const entry of chains[capability]) {
-    const apiKey = Deno.env.get(entry.envKey);
-    if (!apiKey) continue;
-    const usage = await getUsage(db, entry.provider, capability);
-    if (usage.used >= entry.dailyQuota || usage.failed >= MAX_DAILY_FAILURES) continue;
-    try {
-      const result = await task(entry.provider, apiKey);
-      await bumpUsage(db, entry.provider, capability, "used");
-      return { result, provider: entry.provider };
-    } catch (err) {
-      console.error(`[runChain:${capability}] ${entry.provider} failed:`, String(err).slice(0, 300));
-      await bumpUsage(db, entry.provider, capability, "failed");
+    const envKey = Deno.env.get(entry.envKey);
+    const candidates = await candidatesFor(db, entry.provider, envKey);
+    if (!candidates.length) continue;
+    for (const cand of candidates) {
+      try {
+        const result = await task(entry.provider, cand.key);
+        await bumpUsage(db, entry.provider, capability, "used");
+        return { result, provider: entry.provider };
+      } catch (err) {
+        console.error(`[runChain:${capability}] ${entry.provider}(${cand.source}) failed:`, String(err).slice(0, 200));
+        await bumpUsage(db, entry.provider, capability, "failed");
+        if (isQuotaError(err)) await markExhausted(db, entry.provider, cand);
+      }
     }
   }
   throw new ChainExhaustedError(capability);

@@ -2,7 +2,8 @@
 // Keep behaviour in sync with /lib/{gmail,graph,mime}.ts and
 // /lib/providers/run-chain.ts.
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
-import { chains, MAX_DAILY_FAILURES, type Capability } from "./config.ts";
+import { chains, type Capability } from "./config.ts";
+import { decrypt } from "./crypto.ts";
 
 // ── MIME ─────────────────────────────────────────────────────────────────────
 function b64(s: string): string {
@@ -370,23 +371,76 @@ async function bumpUsage(db: SupabaseClient, provider: string, capability: strin
   );
 }
 
+const today = () => new Date().toISOString().slice(0, 10);
+
+function isQuotaError(err: unknown): boolean {
+  return /\b(429|402|quota|rate.?limit|resource.?exhausted|too many requests|insufficient|limit reached|exhaust)\b/i.test(
+    String(err)
+  );
+}
+
+interface Candidate {
+  key: string;
+  source: "db" | "env";
+  id?: string;
+}
+
+async function candidatesFor(db: SupabaseClient, provider: string, envKey?: string): Promise<Candidate[]> {
+  const out: Candidate[] = [];
+  const { data: rows } = await db
+    .from("provider_keys")
+    .select("id, key_enc, exhausted_date, priority")
+    .eq("provider", provider)
+    .eq("active", true)
+    .order("priority");
+  for (const r of rows ?? []) {
+    if (r.exhausted_date === today()) continue;
+    try {
+      out.push({ key: await decrypt(r.key_enc), source: "db", id: r.id });
+    } catch {
+      /* skip undecryptable */
+    }
+  }
+  if (envKey) out.push({ key: envKey, source: "env" });
+  return out;
+}
+
+async function markExhausted(db: SupabaseClient, provider: string, cand: Candidate) {
+  if (cand.source === "db" && cand.id) {
+    await db.from("provider_keys").update({ exhausted_date: today() }).eq("id", cand.id);
+  }
+  const { error } = await db.from("alert_log").insert({ key: `keyexhausted:${provider}`, day: today() });
+  if (!error) {
+    const { data: workspaces } = await db.from("workspaces").select("id");
+    for (const ws of workspaces ?? []) {
+      await db.from("notification_queue").insert({
+        workspace_id: ws.id,
+        event: "provider_quota_exhausted",
+        payload: { provider, note: `${provider} hit its free daily limit — rotated to the next available key/provider.` },
+      });
+    }
+  }
+}
+
 export async function runChain<T>(
   db: SupabaseClient,
   capability: Capability,
   task: (provider: string, apiKey: string) => Promise<T>
 ): Promise<{ result: T; provider: string }> {
   for (const entry of chains[capability]) {
-    const apiKey = Deno.env.get(entry.envKey);
-    if (!apiKey) continue;
-    const usage = await getUsage(db, entry.provider, capability);
-    if (usage.used >= entry.dailyQuota || usage.failed >= MAX_DAILY_FAILURES) continue;
-    try {
-      const result = await task(entry.provider, apiKey);
-      await bumpUsage(db, entry.provider, capability, "used");
-      return { result, provider: entry.provider };
-    } catch (err) {
-      console.error(`[runChain:${capability}] ${entry.provider} failed:`, String(err).slice(0, 300));
-      await bumpUsage(db, entry.provider, capability, "failed");
+    const envKey = Deno.env.get(entry.envKey);
+    const candidates = await candidatesFor(db, entry.provider, envKey);
+    if (!candidates.length) continue;
+    for (const cand of candidates) {
+      try {
+        const result = await task(entry.provider, cand.key);
+        await bumpUsage(db, entry.provider, capability, "used");
+        return { result, provider: entry.provider };
+      } catch (err) {
+        console.error(`[runChain:${capability}] ${entry.provider}(${cand.source}) failed:`, String(err).slice(0, 200));
+        await bumpUsage(db, entry.provider, capability, "failed");
+        if (isQuotaError(err)) await markExhausted(db, entry.provider, cand);
+      }
     }
   }
   throw new ChainExhaustedError(capability);

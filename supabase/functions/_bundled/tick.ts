@@ -82,9 +82,9 @@ var ramp = [
   { week: 3, cap: 25 }
 ];
 var HARD_MAX_DAILY_CAP = 50;
-function effectiveCap(rampStartedAt, dailyCap, today = /* @__PURE__ */ new Date()) {
+function effectiveCap(rampStartedAt, dailyCap, today2 = /* @__PURE__ */ new Date()) {
   const start = new Date(rampStartedAt);
-  const days = Math.floor((today.getTime() - start.getTime()) / 864e5);
+  const days = Math.floor((today2.getTime() - start.getTime()) / 864e5);
   const week = Math.floor(Math.max(0, days) / 7) + 1;
   const capped = Math.min(dailyCap, HARD_MAX_DAILY_CAP);
   const entry = ramp.find((r) => r.week === week);
@@ -131,7 +131,6 @@ var chains = {
   ],
   linkedin: [{ provider: "apify", envKey: "APIFY_TOKEN", dailyQuota: 20 }]
 };
-var MAX_DAILY_FAILURES = 3;
 var aiModels = {
   gemini: "gemini-1.5-flash",
   groq: "llama-3.3-70b-versatile",
@@ -416,19 +415,56 @@ async function bumpUsage(db, provider, capability, field) {
     { onConflict: "provider,capability,day" }
   );
 }
+var today = () => (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+function isQuotaError(err) {
+  return /\b(429|402|quota|rate.?limit|resource.?exhausted|too many requests|insufficient|limit reached|exhaust)\b/i.test(
+    String(err)
+  );
+}
+async function candidatesFor(db, provider, envKey) {
+  const out = [];
+  const { data: rows } = await db.from("provider_keys").select("id, key_enc, exhausted_date, priority").eq("provider", provider).eq("active", true).order("priority");
+  for (const r of rows ?? []) {
+    if (r.exhausted_date === today()) continue;
+    try {
+      out.push({ key: await decrypt(r.key_enc), source: "db", id: r.id });
+    } catch {
+    }
+  }
+  if (envKey) out.push({ key: envKey, source: "env" });
+  return out;
+}
+async function markExhausted(db, provider, cand) {
+  if (cand.source === "db" && cand.id) {
+    await db.from("provider_keys").update({ exhausted_date: today() }).eq("id", cand.id);
+  }
+  const { error } = await db.from("alert_log").insert({ key: `keyexhausted:${provider}`, day: today() });
+  if (!error) {
+    const { data: workspaces } = await db.from("workspaces").select("id");
+    for (const ws of workspaces ?? []) {
+      await db.from("notification_queue").insert({
+        workspace_id: ws.id,
+        event: "provider_quota_exhausted",
+        payload: { provider, note: `${provider} hit its free daily limit \u2014 rotated to the next available key/provider.` }
+      });
+    }
+  }
+}
 async function runChain(db, capability, task) {
   for (const entry of chains[capability]) {
-    const apiKey = Deno.env.get(entry.envKey);
-    if (!apiKey) continue;
-    const usage = await getUsage(db, entry.provider, capability);
-    if (usage.used >= entry.dailyQuota || usage.failed >= MAX_DAILY_FAILURES) continue;
-    try {
-      const result = await task(entry.provider, apiKey);
-      await bumpUsage(db, entry.provider, capability, "used");
-      return { result, provider: entry.provider };
-    } catch (err) {
-      console.error(`[runChain:${capability}] ${entry.provider} failed:`, String(err).slice(0, 300));
-      await bumpUsage(db, entry.provider, capability, "failed");
+    const envKey = Deno.env.get(entry.envKey);
+    const candidates = await candidatesFor(db, entry.provider, envKey);
+    if (!candidates.length) continue;
+    for (const cand of candidates) {
+      try {
+        const result = await task(entry.provider, cand.key);
+        await bumpUsage(db, entry.provider, capability, "used");
+        return { result, provider: entry.provider };
+      } catch (err) {
+        console.error(`[runChain:${capability}] ${entry.provider}(${cand.source}) failed:`, String(err).slice(0, 200));
+        await bumpUsage(db, entry.provider, capability, "failed");
+        if (isQuotaError(err)) await markExhausted(db, entry.provider, cand);
+      }
     }
   }
   throw new ChainExhaustedError(capability);
@@ -1402,9 +1438,9 @@ async function deliverWebhooks(db, workspaceId, event, payload) {
   }
 }
 async function dailyDigests(db) {
-  const today = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+  const today2 = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
   const hour = (/* @__PURE__ */ new Date()).getUTCHours();
-  const { data: due } = await db.from("notification_settings").select("*").eq("digest_hour", hour).or(`last_digest_date.is.null,last_digest_date.lt.${today}`).limit(5);
+  const { data: due } = await db.from("notification_settings").select("*").eq("digest_hour", hour).or(`last_digest_date.is.null,last_digest_date.lt.${today2}`).limit(5);
   let sent = 0;
   for (const s of due ?? []) {
     try {
@@ -1434,7 +1470,7 @@ async function dailyDigests(db) {
       ];
       await dispatchNotification(db, { workspace_id: s.workspace_id, event: "daily_digest", payload: { text: lines.join("\n") } }, s);
       await db.from("notification_queue").update({ status: "sent" }).eq("workspace_id", s.workspace_id).eq("status", "digest");
-      await db.from("notification_settings").update({ last_digest_date: today }).eq("workspace_id", s.workspace_id);
+      await db.from("notification_settings").update({ last_digest_date: today2 }).eq("workspace_id", s.workspace_id);
       sent++;
     } catch (err) {
       console.error(`digest failed for workspace ${s.workspace_id}:`, err);

@@ -39,7 +39,7 @@ export function NotificationsForm({
       email_from_mailbox: null,
       telegram: false,
       n8n: false,
-      instant_events: ["positive_reply", "breaker_tripped", "mailbox_disconnected"],
+      instant_events: ["positive_reply", "reply", "breaker_tripped", "mailbox_disconnected", "provider_quota_exhausted"],
       digest_hour: 8,
     }
   );
