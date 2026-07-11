@@ -1,17 +1,21 @@
 import { requireWorkspace } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase/server";
 import { MailboxList } from "./mailbox-list";
+import { WarmupToggle } from "./warmup-toggle";
 import { PageHeader } from "@/components/ui";
 import type { Mailbox } from "@/lib/types";
 
 export default async function MailboxesPage({ params }: { params: { workspace: string } }) {
   const { workspace } = await requireWorkspace(params.workspace);
   const supabase = createClient();
-  const { data: mailboxes } = await supabase
-    .from("mailboxes")
-    .select("id, workspace_id, provider, email, display_name, status, daily_cap, ramp_started_at, sent_today, sent_date, health_score, consecutive_failures, signature_html, created_at")
-    .eq("workspace_id", workspace.id)
-    .order("created_at");
+  const [{ data: mailboxes }, { data: knowledge }] = await Promise.all([
+    supabase
+      .from("mailboxes")
+      .select("id, workspace_id, provider, email, display_name, status, daily_cap, ramp_started_at, sent_today, sent_date, health_score, consecutive_failures, signature_html, created_at")
+      .eq("workspace_id", workspace.id)
+      .order("created_at"),
+    supabase.from("knowledge").select("profile").eq("workspace_id", workspace.id).maybeSingle(),
+  ]);
 
   return (
     <div>
@@ -35,6 +39,11 @@ export default async function MailboxesPage({ params }: { params: { workspace: s
         }
       />
       <MailboxList mailboxes={(mailboxes ?? []) as unknown as Mailbox[]} />
+      <WarmupToggle
+        workspaceId={workspace.id}
+        enabled={!!(knowledge?.profile as { warmup_enabled?: boolean } | null)?.warmup_enabled}
+        mailboxCount={(mailboxes ?? []).filter((m) => m.status === "active").length}
+      />
     </div>
   );
 }

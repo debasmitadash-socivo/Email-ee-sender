@@ -37,7 +37,10 @@ export function Topbar({
   return (
     <header className="border-b border-border bg-surface">
       <div className="mx-auto max-w-7xl px-6 flex items-center h-14 gap-6">
-        <span className="font-semibold tracking-tight text-sm whitespace-nowrap">Socivo</span>
+        <span className="font-semibold tracking-tight text-sm whitespace-nowrap flex items-center gap-2">
+          <span className="inline-block h-2.5 w-2.5 rounded-full bg-gradient-to-br from-primary to-secondary" />
+          Socivo
+        </span>
         <select
           className="rounded-md border border-border bg-surface px-2 py-1 text-sm max-w-[160px]"
           value={workspace.slug}
@@ -64,8 +67,8 @@ export function Topbar({
                 key={seg}
                 href={href}
                 className={
-                  "px-3 py-1.5 rounded-md text-sm whitespace-nowrap " +
-                  (active ? "text-primary font-medium" : "text-muted hover:text-ink")
+                  "px-3 py-1.5 rounded-full text-sm whitespace-nowrap " +
+                  (active ? "text-primary font-medium bg-primary/10" : "text-muted hover:text-ink hover:bg-border/40")
                 }
               >
                 {label}

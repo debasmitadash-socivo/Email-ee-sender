@@ -14,15 +14,16 @@ export function Button({
   variant?: "default" | "outline" | "ghost" | "danger";
 }) {
   const styles = {
-    default: "bg-primary text-white hover:opacity-90",
-    outline: "bg-surface border border-border text-ink hover:border-muted",
+    default:
+      "bg-gradient-to-b from-[#C285E6] to-[#B56FDC] text-white shadow-sm hover:shadow-md hover:brightness-105",
+    outline: "bg-surface border border-border text-ink hover:border-primary/50 hover:text-primary",
     ghost: "bg-transparent text-muted hover:text-ink",
     danger: "bg-surface border border-danger text-danger hover:bg-danger hover:text-white",
   }[variant];
   return (
     <button
       className={cx(
-        "inline-flex items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50 disabled:pointer-events-none",
+        "inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50 disabled:pointer-events-none",
         styles,
         className
       )}
@@ -158,8 +159,13 @@ export function Td({ children, className }: { children?: React.ReactNode; classN
   return <td className={cx("px-4 py-3 border-b border-border align-top", className)}>{children}</td>;
 }
 
-export function Empty({ children }: { children: React.ReactNode }) {
-  return <div className="card p-12 text-center text-muted text-sm">{children}</div>;
+export function Empty({ children, icon = "✨" }: { children: React.ReactNode; icon?: string }) {
+  return (
+    <div className="card p-12 text-center">
+      <div className="text-3xl mb-3">{icon}</div>
+      <div className="text-muted text-sm max-w-md mx-auto">{children}</div>
+    </div>
+  );
 }
 
 export function PageHeader({

@@ -151,17 +151,26 @@ function ImportWizard({
     reader.onload = () => {
       const parsed = parseCsv(String(reader.result));
       setRows(parsed);
-      // naive auto-mapping by header name
+      // Smart auto-mapping — recognises Apollo, LinkedIn Sales Navigator
+      // (Evaboot/Wiza/etc. exports), Hunter, Lusha and generic header names.
       setMapping(
         (parsed[0] ?? []).map((h) => {
           const n = h.toLowerCase().replace(/[^a-z]/g, "");
+          // exact/known headers first (Apollo: "Person Linkedin Url", SalesNav tools: "profileUrl")
+          if (["email", "workemail", "emailaddress", "verifiedemail", "prospectemail"].includes(n)) return "email";
+          if (["firstname", "first"].includes(n)) return "first_name";
+          if (["lastname", "last", "surname"].includes(n)) return "last_name";
+          if (["company", "companyname", "organisation", "organization", "companyforemails", "currentcompany", "employer", "accountname"].includes(n)) return "company";
+          if (["title", "jobtitle", "position", "role", "headline", "currenttitle"].includes(n)) return "title";
+          if (["personlinkedinurl", "linkedinurl", "linkedin", "profileurl", "linkedinprofile", "linkedinprofileurl", "publicprofileurl"].includes(n)) return "linkedin_url";
+          if (["timezone", "tz"].includes(n)) return "timezone";
+          // fuzzy fallback
           if (n.includes("email")) return "email";
           if (n.includes("first")) return "first_name";
           if (n.includes("last")) return "last_name";
-          if (n.includes("company") || n.includes("organisation") || n.includes("organization")) return "company";
-          if (n.includes("title") || n.includes("role") || n.includes("position")) return "title";
-          if (n.includes("linkedin")) return "linkedin_url";
-          if (n.includes("timezone") || n === "tz") return "timezone";
+          if (n.includes("company") || n.includes("organi")) return "company";
+          if (n.includes("title") || n.includes("position")) return "title";
+          if (n.includes("linkedin") || n.includes("profileurl")) return "linkedin_url";
           return "— ignore —";
         })
       );
@@ -220,6 +229,11 @@ function ImportWizard({
         </button>
       </div>
       <div className="space-y-4">
+        <p className="text-xs text-muted">
+          Works with exports from <strong>Apollo</strong>, <strong>LinkedIn Sales Navigator</strong> (via
+          Evaboot/Wiza/etc.), Hunter, Lusha or any CSV — columns are matched automatically, and anything
+          unmatched is kept as a custom field you can use as {"{{tags}}"} in templates.
+        </p>
         <input type="file" accept=".csv,text/csv" onChange={onFile} className="text-sm" />
         {rows.length > 1 && (
           <>

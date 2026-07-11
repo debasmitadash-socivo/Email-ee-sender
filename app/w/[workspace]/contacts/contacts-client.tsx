@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button, Card, Chip, Empty, Input, Label, Select, Table, Th, Td, stateTone } from "@/components/ui";
 import { temperatureOf, temperatureMeta, type Temperature } from "@/lib/temperature";
+import { renderVars, spin } from "@/lib/render";
 import type { ClState, ReplyCategory } from "@/lib/types";
 
 interface Enrolment {
@@ -45,6 +46,8 @@ export function ContactsClient({
 }) {
   const router = useRouter();
   const [filter, setFilter] = useState<Temperature | "all">("all");
+  const [search, setSearch] = useState("");
+  const [sortBy, setSortBy] = useState<"newest" | "next_send" | "temperature">("newest");
 
   const rows = useMemo(
     () =>
@@ -54,7 +57,25 @@ export function ContactsClient({
       })),
     [enrolments, lastCategory]
   );
-  const filtered = filter === "all" ? rows : rows.filter((r) => r.temperature === filter);
+  const tempOrder: Record<Temperature, number> = { warm: 0, neutral: 1, cold: 2, rejected: 3 };
+  const filtered = useMemo(() => {
+    let out = filter === "all" ? rows : rows.filter((r) => r.temperature === filter);
+    const q = search.trim().toLowerCase();
+    if (q) {
+      out = out.filter((r) =>
+        [r.leads.email, r.leads.first_name, r.leads.last_name, r.leads.company, r.campaigns.name]
+          .filter(Boolean)
+          .some((v) => String(v).toLowerCase().includes(q))
+      );
+    }
+    if (sortBy === "next_send") {
+      out = [...out].sort((a, b) => (a.next_send_at ?? "9999").localeCompare(b.next_send_at ?? "9999"));
+    } else if (sortBy === "temperature") {
+      out = [...out].sort((a, b) => tempOrder[a.temperature] - tempOrder[b.temperature]);
+    }
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, filter, search, sortBy]);
   const counts = useMemo(() => {
     const c: Record<Temperature, number> = { warm: 0, cold: 0, neutral: 0, rejected: 0 };
     for (const r of rows) c[r.temperature]++;
@@ -70,7 +91,18 @@ export function ContactsClient({
         onAdded={() => router.refresh()}
       />
 
-      <div className="flex gap-1.5 flex-wrap items-center">
+      <div className="flex gap-2 flex-wrap items-center">
+        <Input
+          className="max-w-xs"
+          placeholder="Search name, email, company…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        <Select value={sortBy} onChange={(e) => setSortBy(e.target.value as typeof sortBy)}>
+          <option value="newest">Newest first</option>
+          <option value="next_send">Next send first</option>
+          <option value="temperature">Warmest first</option>
+        </Select>
         <FilterButton label={`All ${rows.length}`} active={filter === "all"} onClick={() => setFilter("all")} />
         {(Object.keys(temperatureMeta) as Temperature[]).map((t) => (
           <FilterButton
@@ -80,11 +112,11 @@ export function ContactsClient({
             onClick={() => setFilter(t)}
           />
         ))}
-        <span className="text-xs text-muted ml-2">
-          Warm = interested/info request · Cold = no reply yet, sequence running · Neutral = not now / OOO ·
-          Rejected = not interested / bounced / unsubscribed
-        </span>
       </div>
+      <p className="text-xs text-muted -mt-3">
+        🟢 Warm = interested / info request · 🔵 Cold = no reply yet, sequence running · 🟡 Neutral = not
+        now / out of office · 🔴 Rejected = not interested / bounced / unsubscribed
+      </p>
 
       {filtered.length ? (
         <Table>
@@ -239,8 +271,29 @@ function AddContactForm({
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  const [showPreview, setShowPreview] = useState(false);
+
   const template = templates.find((t) => t.id === templateId);
   const usesAi = template ? /\{\{\s*ai_/.test(`${template.subject} ${template.body}`) : false;
+
+  const preview = useMemo(() => {
+    if (!template) return null;
+    const vars: Record<string, string> = {
+      email,
+      first_name: firstName,
+      last_name: lastName,
+      full_name: [firstName, lastName].filter(Boolean).join(" "),
+      company,
+      title: "",
+      domain: email.split("@")[1] ?? "",
+    };
+    const slotNames = [...`${template.subject} ${template.body}`.matchAll(/\{\{\s*(ai_[a-zA-Z0-9_]+)\s*\}\}/g)].map((m) => m[1]);
+    const slots = Object.fromEntries(slotNames.map((s) => [s, `⟨AI will write: ${s.replace("ai_", "").replace(/_/g, " ")}⟩`]));
+    const subj = renderVars(spin(template.subject), vars, slots);
+    const body = renderVars(spin(template.body), vars, slots);
+    const missing = [...new Set([...subj.missing, ...body.missing])].filter((m) => !m.startsWith("ai_"));
+    return { subject: subj.rendered, body: body.rendered, missing };
+  }, [template, email, firstName, lastName, company]);
 
   async function add(e: React.FormEvent) {
     e.preventDefault();
@@ -350,10 +403,28 @@ function AddContactForm({
             />
           </div>
         </div>
+        {template && showPreview && preview && (
+          <div className="rounded-md border border-border bg-bg p-4 text-sm">
+            <div className="text-xs text-muted mb-1">Preview — exactly what will be sent (plus your signature and the compliance footer):</div>
+            <div className="font-medium mb-2">Subject: {preview.subject || "(empty)"}</div>
+            <pre className="whitespace-pre-wrap font-sans">{preview.body}</pre>
+            {preview.missing.length > 0 && (
+              <p className="text-xs text-danger mt-2">
+                ⚠ These tags have no value and will render blank: {preview.missing.map((m) => `{{${m}}}`).join(", ")} —
+                fill the matching fields above or edit the template.
+              </p>
+            )}
+          </div>
+        )}
         <div className="flex items-center gap-3 flex-wrap">
           <Button type="submit" disabled={busy || !templateId || !mailboxId}>
             {busy ? "Adding…" : "Add & start sequence"}
           </Button>
+          {template && (
+            <Button type="button" variant="outline" onClick={() => setShowPreview(!showPreview)}>
+              {showPreview ? "Hide preview" : "Preview email"}
+            </Button>
+          )}
           {template && (
             <span className="text-xs text-muted">
               {usesAi

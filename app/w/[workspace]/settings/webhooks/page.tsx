@@ -13,14 +13,16 @@ export default async function WebhooksPage({ params }: { params: { workspace: st
     .eq("workspace_id", workspace.id)
     .order("created_at");
 
-  // workspace REST API token (HMAC-derived; no schema needed)
+  // workspace REST API token + white-label client report link (HMAC-derived; no schema needed)
   const apiToken = await signToken({ ws: workspace.id, kind: "api" });
+  const portalToken = await signToken({ ws: workspace.id, kind: "portal" });
+  const portalUrl = `${process.env.APP_URL}/portal/${portalToken}`;
 
   return (
     <div>
       <PageHeader title="Webhooks & API" />
       {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-      <WebhooksClient workspaceId={workspace.id} hooks={(hooks ?? []) as any[]} apiToken={apiToken} />
+      <WebhooksClient workspaceId={workspace.id} hooks={(hooks ?? []) as any[]} apiToken={apiToken} portalUrl={portalUrl} />
     </div>
   );
 }

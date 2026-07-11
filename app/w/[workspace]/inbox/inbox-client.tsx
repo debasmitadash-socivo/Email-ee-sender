@@ -34,12 +34,14 @@ export function InboxClient({
   positives,
   activeCategory,
   activeTemp,
+  intent = {},
 }: {
   slug: string;
   messages: Message[];
   positives: PositiveRow[];
   activeCategory: string | null;
   activeTemp: string | null;
+  intent?: Record<string, number>;
 }) {
   const router = useRouter();
   const [selected, setSelected] = useState<Message | null>(null);
@@ -84,6 +86,9 @@ export function InboxClient({
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-medium truncate">{m.from_email}</span>
                     {m.category && <Chip tone={stateTone(m.category)}>{m.category.replace("_", " ")}</Chip>}
+                    {intent[m.id] !== undefined && intent[m.id] > 0 && (
+                      <Chip tone={intent[m.id] >= 7 ? "danger" : "warn"}>🔥 {intent[m.id]}/10</Chip>
+                    )}
                   </div>
                   <div className="text-sm truncate">{m.subject}</div>
                   <div className="text-xs text-muted truncate">{m.snippet}</div>

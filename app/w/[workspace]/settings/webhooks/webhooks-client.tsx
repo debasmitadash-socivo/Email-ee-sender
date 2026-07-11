@@ -18,10 +18,12 @@ export function WebhooksClient({
   workspaceId,
   hooks,
   apiToken,
+  portalUrl,
 }: {
   workspaceId: string;
   hooks: Hook[];
   apiToken: string;
+  portalUrl?: string;
 }) {
   const router = useRouter();
   const supabase = createClient();
@@ -57,6 +59,17 @@ export function WebhooksClient({
         <Label>Workspace API token</Label>
         <Input readOnly value={apiToken} onFocus={(e) => e.currentTarget.select()} />
       </Card>
+
+      {portalUrl && (
+        <Card>
+          <h2 className="text-sm font-semibold mb-2">Client report link (white-label)</h2>
+          <p className="text-sm text-muted mb-3">
+            A read-only performance page for this workspace — no login, no app navigation, nothing but
+            their numbers. Share it with the client; anyone with the link can view it.
+          </p>
+          <Input readOnly value={portalUrl} onFocus={(e) => e.currentTarget.select()} />
+        </Card>
+      )}
 
       <Card>
         <h2 className="text-sm font-semibold mb-3">Webhooks</h2>

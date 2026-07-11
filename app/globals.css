@@ -14,11 +14,40 @@ body {
 
 /* white-max: separation via hairline borders + whitespace, never grey fills */
 .card {
-  @apply bg-surface border border-border rounded-lg;
+  @apply bg-surface border border-border rounded-xl;
+  box-shadow: 0 1px 2px rgba(7, 7, 13, 0.03);
+  transition: box-shadow 0.15s ease, border-color 0.15s ease;
+}
+.card:hover {
+  box-shadow: 0 2px 8px rgba(7, 7, 13, 0.06);
 }
 
 input,
 select,
 textarea {
   @apply focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+button,
+a {
+  transition: opacity 0.12s ease, background-color 0.12s ease, color 0.12s ease, transform 0.08s ease,
+    box-shadow 0.12s ease;
+}
+button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+main {
+  animation: pagein 0.18s ease;
+}
+@keyframes pagein {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }

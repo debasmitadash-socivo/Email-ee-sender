@@ -654,6 +654,7 @@ Deno.serve(async (req) => {
     ["reply_poll", () => replyPoll(db)],
     ["research", () => invokeResearch()],
     ["breakers", () => breakers(db)],
+    ["warmup", () => warmup(db)],
     ["notifications", () => flushNotifications(db)],
     ["digests", () => dailyDigests(db)]
   ];
@@ -1093,6 +1094,7 @@ async function handleInbound(db, mb, msg) {
   }).select().single();
   if (!stored) return;
   let category = "other";
+  let buyingSignal = null;
   if (isBounceSender) {
     category = "bounce";
   } else if (/out of (the )?office|annual leave|on holiday|maternity|paternity|auto-?reply|automatic reply/i.test(`${msg.subject} ${msg.body.slice(0, 500)}`)) {
@@ -1105,7 +1107,7 @@ async function handleInbound(db, mb, msg) {
         const raw = await aiComplete(
           provider,
           apiKey,
-          `You classify replies to cold outreach emails. Respond with strict JSON only: {"category":"<one of interested|info_request|not_now|not_interested|ooo|wrong_person|bounce|unsubscribe|other>","confidence":<0-1>}. Any request to stop emailing or remove from lists is "unsubscribe" regardless of wording.`,
+          `You classify replies to cold outreach emails. Respond with strict JSON only: {"category":"<one of interested|info_request|not_now|not_interested|ooo|wrong_person|bounce|unsubscribe|other>","confidence":<0-1>,"buying_signal":<0-10>}. Any request to stop emailing or remove from lists is "unsubscribe" regardless of wording. buying_signal: 0 for negative/neutral replies; for interested/info_request, score strength of intent from language like urgency ("this week", "call me"), budget mentions, timelines, or specific questions \u2014 a polite "tell me more" is ~4, "can we talk Thursday, we have budget" is ~9.`,
           `Subject: ${msg.subject}
 
 Body:
@@ -1130,6 +1132,9 @@ ${msg.body.slice(0, 2e3)}`
         "other"
       ];
       if (valid.includes(result.category)) category = result.category;
+      if (typeof result.buying_signal === "number") {
+        buyingSignal = Math.max(0, Math.min(10, Math.round(result.buying_signal)));
+      }
     } catch (err) {
       if (err instanceof ChainExhaustedError && await onceToday(db, "chain:ai_classify")) {
         await queueNotification(db, mb.workspace_id, "provider_quota_exhausted", { capability: "ai_classify" });
@@ -1177,12 +1182,13 @@ ${msg.body.slice(0, 2e3)}`
       message_id: stored.id,
       campaign_lead_id: campaignLead.id,
       type: "reply",
-      meta: { category }
+      meta: { category, ...buyingSignal !== null ? { buying_signal: buyingSignal } : {} }
     });
     await queueNotification(db, mb.workspace_id, positive ? "positive_reply" : "reply", {
       campaign: campaign == null ? void 0 : campaign.name,
       lead: lead == null ? void 0 : lead.email,
       category,
+      ...buyingSignal !== null ? { buying_signal: `${buyingSignal}/10` } : {},
       snippet: msg.snippet.slice(0, 200)
     });
   }
@@ -1226,6 +1232,73 @@ async function breakers(db) {
     }
   }
   return { tripped };
+}
+var WARMUP_SUBJECTS = [
+  "Notes from this morning",
+  "That doc we discussed",
+  "Following on from earlier",
+  "Small update",
+  "Before I forget"
+];
+var WARMUP_BODIES = [
+  "Sending over the summary we talked about \u2014 will add the rest tomorrow once I've been through the numbers.",
+  "Had another look at this after our chat. Broadly agree with your take; a couple of details worth going over when you have ten minutes.",
+  "Sharing so it's in both our inboxes \u2014 flag anything that looks off and I'll fix it before the end of the week.",
+  "This is roughly where things landed. Nothing urgent, just keeping you in the loop."
+];
+var WARMUP_PER_DAY = 2;
+async function warmup(db) {
+  var _a;
+  const now = /* @__PURE__ */ new Date();
+  if (now.getUTCMinutes() !== 15 || ![9, 13].includes(now.getUTCHours())) return { skipped: "not a warmup slot" };
+  const { data: enabled } = await db.from("knowledge").select("workspace_id, profile").limit(50);
+  let sent = 0;
+  for (const k of enabled ?? []) {
+    if (!((_a = k.profile) == null ? void 0 : _a.warmup_enabled)) continue;
+    const { data: mbs } = await db.from("mailboxes").select("*").eq("workspace_id", k.workspace_id).eq("status", "active");
+    if (!mbs || mbs.length < 2) continue;
+    const dayStart = /* @__PURE__ */ new Date();
+    dayStart.setUTCHours(0, 0, 0, 0);
+    for (let i = 0; i < mbs.length; i++) {
+      const from = mbs[i];
+      const to = mbs[(i + 1) % mbs.length];
+      const { count } = await db.from("messages").select("id", { count: "exact", head: true }).eq("mailbox_id", from.id).eq("direction", "outbound").eq("is_seed", true).eq("is_internal", true).gte("occurred_at", dayStart.toISOString());
+      if ((count ?? 0) >= WARMUP_PER_DAY) continue;
+      try {
+        const accessToken = await accessTokenFor(db, from);
+        const subject = WARMUP_SUBJECTS[Math.floor(Math.random() * WARMUP_SUBJECTS.length)];
+        const body = WARMUP_BODIES[Math.floor(Math.random() * WARMUP_BODIES.length)];
+        if (from.provider === "google") {
+          const raw = buildMime({
+            from: { email: from.email },
+            to: to.email,
+            subject,
+            text: body,
+            messageId: generateMessageId(from.email.split("@")[1] ?? "mail")
+          });
+          await gmailSend(accessToken, base64UrlEncode(raw));
+        } else {
+          await graphSendMail(accessToken, { to: to.email, subject, text: body });
+        }
+        await db.from("messages").insert({
+          workspace_id: k.workspace_id,
+          mailbox_id: from.id,
+          direction: "outbound",
+          from_email: from.email,
+          to_email: to.email,
+          subject,
+          snippet: body.slice(0, 200),
+          is_seed: true,
+          is_internal: true
+        });
+        await db.rpc("bump_mailbox_sent", { mb: from.id });
+        sent++;
+      } catch (err) {
+        console.error(`warmup send failed ${from.email} \u2192 ${to.email}:`, err);
+      }
+    }
+  }
+  return { warmup_sent: sent };
 }
 async function flushNotifications(db) {
   const { data: pending } = await db.from("notification_queue").select("*").eq("status", "pending").lt("attempts", 3).limit(20);

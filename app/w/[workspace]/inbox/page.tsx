@@ -27,7 +27,7 @@ export default async function InboxPage({
     if (cats.length) q = q.in("category", cats);
   }
 
-  const [{ data: messages }, { data: positives }] = await Promise.all([
+  const [{ data: messages }, { data: positives }, { data: replyEvents }] = await Promise.all([
     q,
     supabase
       .from("campaign_leads")
@@ -36,7 +36,21 @@ export default async function InboxPage({
       .eq("state", "positive")
       .order("created_at", { ascending: false })
       .limit(30),
+    supabase
+      .from("events")
+      .select("message_id, meta")
+      .eq("workspace_id", workspace.id)
+      .eq("type", "reply")
+      .order("created_at", { ascending: false })
+      .limit(200),
   ]);
+
+  // buying-signal scores keyed by message id (set by the reply classifier)
+  const intent: Record<string, number> = {};
+  for (const e of replyEvents ?? []) {
+    const score = (e.meta as { buying_signal?: number })?.buying_signal;
+    if (e.message_id && typeof score === "number") intent[e.message_id] = score;
+  }
 
   return (
     <div>
@@ -49,6 +63,7 @@ export default async function InboxPage({
         /* eslint-enable @typescript-eslint/no-explicit-any */
         activeCategory={searchParams.category ?? null}
         activeTemp={searchParams.temp ?? null}
+        intent={intent}
       />
     </div>
   );
