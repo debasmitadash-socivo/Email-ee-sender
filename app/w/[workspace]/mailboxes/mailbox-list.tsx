@@ -151,6 +151,71 @@ function MailboxCard({ mailbox }: { mailbox: Mailbox }) {
           )}
         </div>
       </div>
+
+      <SignatureEditor mailbox={mailbox} onSaved={() => router.refresh()} />
     </Card>
+  );
+}
+
+function SignatureEditor({ mailbox, onSaved }: { mailbox: Mailbox; onSaved: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState(
+    mailbox.signature_html ? mailbox.signature_html.replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]+>/g, "") : ""
+  );
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  async function save() {
+    setBusy(true);
+    setMsg(null);
+    const signature_html = text
+      .split("\n")
+      .map((l) => l.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"))
+      .join("<br>");
+    const res = await fetch(`/api/mailboxes/${mailbox.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ signature_html }),
+    });
+    setBusy(false);
+    setMsg(res.ok ? "Saved." : "Failed to save.");
+    if (res.ok) onSaved();
+  }
+
+  if (!open) {
+    return (
+      <button
+        className="text-xs text-secondary hover:underline mt-4"
+        onClick={() => setOpen(true)}
+      >
+        {mailbox.signature_html ? "Edit closing signature" : "+ Add closing signature"}
+      </button>
+    );
+  }
+  return (
+    <div className="mt-4 pt-4 border-t border-border">
+      <div className="text-sm font-medium mb-2">Closing signature</div>
+      <p className="text-xs text-muted mb-2">
+        Appended after every email body, before the compliance footer (unsubscribe + identity). Plain
+        text, one line per line — e.g. your name, title, phone. HTML emails only (no effect in plain-text
+        mode).
+      </p>
+      <textarea
+        className="w-full rounded-md border border-border bg-surface px-3 py-2 text-sm"
+        rows={4}
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        placeholder={"Debasmita Dash\nFounder, Socivo\n+44 ..."}
+      />
+      <div className="flex items-center gap-3 mt-2">
+        <Button onClick={save} disabled={busy}>
+          {busy ? "…" : "Save signature"}
+        </Button>
+        <Button variant="ghost" onClick={() => setOpen(false)}>
+          Close
+        </Button>
+        {msg && <span className="text-xs text-muted">{msg}</span>}
+      </div>
+    </div>
   );
 }

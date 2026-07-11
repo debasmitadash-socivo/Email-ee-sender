@@ -46,6 +46,8 @@ export function CampaignBuilder(props: {
   const [launchFailures, setLaunchFailures] = useState<string[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [reviewData, setReviewData] = useState<ReviewPreview[] | null>(null);
+  const [skipDnsForTesting, setSkipDnsForTesting] = useState(false);
+  const tabIndex = TABS.indexOf(tab);
 
   async function saveSteps() {
     setBusy("steps");
@@ -95,7 +97,7 @@ export function CampaignBuilder(props: {
     const res = await fetch(`/api/campaigns/${campaign.id}/launch`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({}),
+      body: JSON.stringify({ force_dns: skipDnsForTesting }),
     });
     const data = await res.json();
     setBusy(null);
@@ -158,6 +160,19 @@ export function CampaignBuilder(props: {
         </div>
       </div>
 
+      {campaign.status === "draft" && (
+        <label className="flex items-center gap-2 text-xs text-warn mb-4">
+          <input
+            type="checkbox"
+            checked={skipDnsForTesting}
+            onChange={(e) => setSkipDnsForTesting(e.target.checked)}
+            className="accent-[#F59E0B]"
+          />
+          Skip SPF/DKIM/DMARC check for this launch (testing only — real prospects need a verified sending
+          domain; this is the only gate this bypasses, every other guard still applies)
+        </label>
+      )}
+
       {msg && <p className="text-sm text-muted mb-4">{msg}</p>}
       {launchFailures.length > 0 && (
         <Card className="mb-6 border-danger">
@@ -167,6 +182,12 @@ export function CampaignBuilder(props: {
               <li key={i}>{f}</li>
             ))}
           </ul>
+          {launchFailures.some((f) => /SPF|DKIM|DMARC/.test(f)) && (
+            <p className="text-xs text-muted mt-2">
+              Tip: tick "Skip SPF/DKIM/DMARC check" above to test on personal Gmail — every other guard
+              (suppression, ramp, jitter, compliance hours) still applies.
+            </p>
+          )}
         </Card>
       )}
 
@@ -504,6 +525,34 @@ export function CampaignBuilder(props: {
           )}
         </div>
       )}
+
+      <div className="flex items-center justify-between mt-8 pt-4 border-t border-border">
+        <Button
+          variant="outline"
+          disabled={tabIndex === 0}
+          onClick={() => setTab(TABS[tabIndex - 1])}
+        >
+          ← Back
+        </Button>
+        <span className="text-xs text-muted">
+          Step {tabIndex + 1} of {TABS.length}
+        </span>
+        {tabIndex < TABS.length - 1 ? (
+          <Button
+            onClick={() => {
+              const next = TABS[tabIndex + 1];
+              setTab(next);
+              if (next === "Review") loadReview();
+            }}
+          >
+            Next →
+          </Button>
+        ) : (
+          <Button onClick={launch} disabled={busy === "launch" || campaign.status !== "draft"}>
+            {busy === "launch" ? "Checking…" : campaign.status === "draft" ? "Launch" : "Already launched"}
+          </Button>
+        )}
+      </div>
     </div>
   );
 }

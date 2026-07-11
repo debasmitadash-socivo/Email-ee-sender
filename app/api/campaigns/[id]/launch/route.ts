@@ -54,6 +54,42 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   if (!audience) failures.push("Audience is empty — add leads.");
 
+  // ── Format/tag validation (flag before send, not after) ────────────────────
+  const KNOWN_VARS = new Set(["email", "first_name", "last_name", "full_name", "company", "domain", "title"]);
+  const knownCustomKeys = new Set<string>();
+  if (audience) {
+    const { data: sample } = await supabase
+      .from("campaign_leads")
+      .select("leads(custom)")
+      .eq("campaign_id", params.id)
+      .limit(50);
+    for (const row of sample ?? []) {
+      const custom = (row.leads as unknown as { custom?: Record<string, unknown> })?.custom ?? {};
+      Object.keys(custom).forEach((k) => knownCustomKeys.add(k));
+    }
+  }
+  for (const s of stepList) {
+    const text = `${s.subject ?? ""} ${s.body}`;
+    // spintax: unbalanced braces
+    const openCount = (text.match(/\{(?!\{)/g) ?? []).length;
+    const closeCount = (text.match(/(?<!\})\}/g) ?? []).length;
+    if (openCount !== closeCount) {
+      failures.push(`Step ${s.step_no} variant ${s.variant}: unbalanced spintax braces {like this|this} — check for a stray { or }.`);
+    }
+    // malformed / empty {{ }}
+    if (/\{\{\s*\}\}/.test(text)) {
+      failures.push(`Step ${s.step_no} variant ${s.variant}: contains an empty {{}} placeholder.`);
+    }
+    // unresolvable variables — not a lead field, not seen in any lead's custom data, not an AI slot
+    const tags = [...text.matchAll(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g)].map((m) => m[1]);
+    for (const tag of tags) {
+      if (tag.startsWith("ai_") || KNOWN_VARS.has(tag) || knownCustomKeys.has(tag)) continue;
+      failures.push(
+        `Step ${s.step_no} variant ${s.variant}: {{${tag}}} isn't a standard field and no lead in the audience has a "${tag}" column — it will render blank. Check the CSV column name or remove the tag.`
+      );
+    }
+  }
+
   // Live DNS pass per sending domain (SPF includes provider, DKIM selector present, DMARC exists)
   const dnsResults: Record<string, unknown> = {};
   if (!force_dns) {

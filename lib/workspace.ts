@@ -10,16 +10,19 @@ export async function requireWorkspace(slug: string): Promise<{
   allWorkspaces: Workspace[];
 }> {
   const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // auth check and workspace lookup don't depend on each other — run them in
+  // parallel instead of serially (this runs on every page load via the
+  // workspace layout, so cutting round trips here matters everywhere).
+  const [
+    {
+      data: { user },
+    },
+    { data: workspace },
+  ] = await Promise.all([
+    supabase.auth.getUser(),
+    supabase.from("workspaces").select("*").eq("slug", slug).maybeSingle(),
+  ]);
   if (!user) redirect("/login");
-
-  const { data: workspace } = await supabase
-    .from("workspaces")
-    .select("*")
-    .eq("slug", slug)
-    .maybeSingle();
   if (!workspace) notFound();
 
   const [{ data: member }, { data: all }] = await Promise.all([

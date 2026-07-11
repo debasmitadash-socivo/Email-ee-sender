@@ -15,9 +15,43 @@ export function KnowledgeForm({
   const [p, setP] = useState<KnowledgeProfile>(initial);
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [showAutofill, setShowAutofill] = useState(false);
+  const [companyInfo, setCompanyInfo] = useState("");
+  const [website, setWebsite] = useState("");
+  const [autofillBusy, setAutofillBusy] = useState(false);
+  const [autofillMsg, setAutofillMsg] = useState<string | null>(null);
 
   function set<K extends keyof KnowledgeProfile>(key: K, value: KnowledgeProfile[K]) {
     setP({ ...p, [key]: value });
+  }
+
+  async function autofill() {
+    setAutofillBusy(true);
+    setAutofillMsg(null);
+    const res = await fetch("/api/knowledge/autofill", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ workspace_id: workspaceId, company_info: companyInfo, website }),
+    });
+    const data = await res.json();
+    setAutofillBusy(false);
+    if (!res.ok) {
+      setAutofillMsg(data.error);
+      return;
+    }
+    const filled = data.profile as Partial<KnowledgeProfile>;
+    setP({
+      ...p,
+      what_we_sell: filled.what_we_sell || p.what_we_sell,
+      offer: filled.offer || p.offer,
+      icp: filled.icp || p.icp,
+      pains: filled.pains?.length ? filled.pains : p.pains,
+      proof_points: filled.proof_points?.length ? filled.proof_points : p.proof_points,
+      tone_rules: filled.tone_rules || p.tone_rules,
+      sender_name: filled.sender_name || p.sender_name,
+    });
+    setAutofillMsg("Filled below — review and edit before saving, then click Save profile.");
+    setShowAutofill(false);
   }
 
   async function save() {
@@ -56,6 +90,44 @@ export function KnowledgeForm({
   return (
     <Card className="max-w-2xl">
       <div className="space-y-4">
+        <div className="rounded-md border border-primary/30 bg-primary/5 p-4">
+          {!showAutofill ? (
+            <div className="flex items-center justify-between">
+              <p className="text-sm">
+                <span className="font-medium">Fill this from AI</span> — paste a company description or a
+                website URL and let AI draft the fields below.
+              </p>
+              <Button variant="outline" onClick={() => setShowAutofill(true)}>
+                Autofill with AI
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <Label>Website (optional)</Label>
+              <Input placeholder="socivo.co.uk" value={website} onChange={(e) => setWebsite(e.target.value)} />
+              <Label>Or paste a company description</Label>
+              <Textarea
+                rows={4}
+                placeholder="What you do, who you sell to, any proof points (client count, case studies)…"
+                value={companyInfo}
+                onChange={(e) => setCompanyInfo(e.target.value)}
+              />
+              <div className="flex items-center gap-3">
+                <Button onClick={autofill} disabled={autofillBusy || (!website && !companyInfo)}>
+                  {autofillBusy ? "Reading & drafting…" : "Generate"}
+                </Button>
+                <Button variant="ghost" onClick={() => setShowAutofill(false)}>
+                  Cancel
+                </Button>
+              </div>
+              <p className="text-xs text-muted">
+                Only states facts you give it — it won't invent proof points or numbers. Fills the fields
+                below for you to review and edit before saving.
+              </p>
+            </div>
+          )}
+          {autofillMsg && <p className="text-xs text-muted mt-2">{autofillMsg}</p>}
+        </div>
         {textField("what_we_sell", "What we sell", 2)}
         {textField("offer", "The offer (what the email proposes)", 2)}
         {textField("icp", "Ideal customer profile", 2)}
