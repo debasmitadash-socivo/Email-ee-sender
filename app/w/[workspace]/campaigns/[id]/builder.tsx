@@ -21,6 +21,7 @@ export function CampaignBuilder(props: {
   attachedMailboxIds: string[];
   mailboxes: { id: string; email: string; provider: string; status: string }[];
   lists: { id: string; name: string }[];
+  tags: string[];
   audienceCount: number;
   stateCounts: Record<string, number>;
   slug: string;
@@ -42,6 +43,7 @@ export function CampaignBuilder(props: {
   const [settings, setSettings] = useState<CampaignSettings>(campaign.settings ?? {});
   const [mailboxIds, setMailboxIds] = useState<string[]>(props.attachedMailboxIds);
   const [listId, setListId] = useState("");
+  const [audienceTag, setAudienceTag] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
   const [launchFailures, setLaunchFailures] = useState<string[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
@@ -75,7 +77,11 @@ export function CampaignBuilder(props: {
     const res = await fetch(`/api/campaigns/${campaign.id}/audience`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mailbox_ids: mailboxIds, list_id: listId || undefined }),
+      body: JSON.stringify({
+        mailbox_ids: mailboxIds,
+        list_id: listId || undefined,
+        tag: !listId && audienceTag ? audienceTag : undefined,
+      }),
     });
     const data = await res.json();
     setBusy(null);
@@ -337,8 +343,8 @@ export function CampaignBuilder(props: {
               </div>
             </div>
             <div>
-              <Label>Add leads from list (invalid-verification leads are excluded)</Label>
-              <Select value={listId} onChange={(e) => setListId(e.target.value)}>
+              <Label>Add leads from a list (invalid-verification leads are excluded)</Label>
+              <Select value={listId} onChange={(e) => { setListId(e.target.value); if (e.target.value) setAudienceTag(""); }}>
                 <option value="">— choose a list —</option>
                 {props.lists.map((l) => (
                   <option key={l.id} value={l.id}>
@@ -347,6 +353,23 @@ export function CampaignBuilder(props: {
                 ))}
               </Select>
             </div>
+            {props.tags.length > 0 && (
+              <div>
+                <Label>…or add leads by bucket / tag</Label>
+                <Select value={audienceTag} onChange={(e) => { setAudienceTag(e.target.value); if (e.target.value) setListId(""); }}>
+                  <option value="">— choose a tag —</option>
+                  {props.tags.map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                </Select>
+                <p className="text-xs text-muted mt-1">
+                  Tag leads on the Leads page (bulk-select → Add tag, or tag a whole CSV on import), then
+                  target that bucket here.
+                </p>
+              </div>
+            )}
             <Button onClick={saveAudience} disabled={busy === "audience"}>
               {busy === "audience" ? "…" : "Save audience"}
             </Button>

@@ -8,6 +8,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const supabase = createClient();
   const body = (await req.json()) as {
     list_id?: string;
+    tag?: string;
     lead_ids?: string[];
     mailbox_ids?: string[];
     exclude_invalid?: boolean;
@@ -34,14 +35,23 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   // leads
   let leadIds = body.lead_ids ?? [];
   if (body.list_id) {
-    let q = supabase
+    const { data: listLeads, error } = await supabase
       .from("leads")
       .select("id, verify_status")
       .eq("workspace_id", campaign.workspace_id)
       .eq("list_id", body.list_id);
-    const { data: listLeads, error } = await q;
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     leadIds = (listLeads ?? [])
+      .filter((l) => (body.exclude_invalid !== false ? l.verify_status !== "invalid" : true))
+      .map((l) => l.id);
+  } else if (body.tag) {
+    const { data: taggedLeads, error } = await supabase
+      .from("leads")
+      .select("id, verify_status")
+      .eq("workspace_id", campaign.workspace_id)
+      .contains("tags", [body.tag]);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    leadIds = (taggedLeads ?? [])
       .filter((l) => (body.exclude_invalid !== false ? l.verify_status !== "invalid" : true))
       .map((l) => l.id);
   }

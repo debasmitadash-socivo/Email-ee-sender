@@ -76,6 +76,7 @@ export interface Lead {
   linkedin_url: string | null;
   timezone: string | null;
   custom: Record<string, unknown>;
+  tags: string[];
   verify_status: VerifyStatus;
   verify_provider: string | null;
   created_at: string;

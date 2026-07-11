@@ -22,8 +22,10 @@ export async function POST(req: NextRequest) {
     workspace_id: string;
     list_id?: string;
     new_list_name?: string;
+    tags?: string[];
     rows: ImportRow[];
   };
+  const importTags = (body.tags ?? []).map((t) => t.trim().toLowerCase()).filter(Boolean);
   if (!body.workspace_id || !Array.isArray(body.rows)) {
     return NextResponse.json({ error: "workspace_id and rows required" }, { status: 400 });
   }
@@ -64,6 +66,7 @@ export async function POST(req: NextRequest) {
       linkedin_url: r.linkedin_url || null,
       timezone: r.timezone || null,
       custom: r.custom ?? {},
+      tags: importTags,
     }));
 
   if (!rows.length) return NextResponse.json({ imported: 0, skipped: body.rows.length, list_id: listId });

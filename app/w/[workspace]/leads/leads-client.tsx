@@ -19,18 +19,56 @@ export function LeadsClient({
   lists,
   leads,
   activeList,
+  activeTag,
+  allTags,
 }: {
   workspaceId: string;
   slug: string;
   lists: List[];
   leads: Lead[];
   activeList: string | null;
+  activeTag: string | null;
+  allTags: string[];
 }) {
   const router = useRouter();
   const [showImport, setShowImport] = useState(false);
   const [drawer, setDrawer] = useState<Lead | null>(null);
   const [verifying, setVerifying] = useState(false);
   const [verifyStatus, setVerifyStatus] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [tagInput, setTagInput] = useState("");
+
+  function toggle(id: string) {
+    const next = new Set(selected);
+    next.has(id) ? next.delete(id) : next.add(id);
+    setSelected(next);
+  }
+  function toggleAll() {
+    setSelected(selected.size === leads.length ? new Set() : new Set(leads.map((l) => l.id)));
+  }
+  async function applyTag(remove = false) {
+    if (!tagInput.trim() || !selected.size) return;
+    await fetch("/api/leads/tag", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        lead_ids: [...selected],
+        [remove ? "remove" : "add"]: tagInput.split(",").map((t) => t.trim()).filter(Boolean),
+      }),
+    });
+    setTagInput("");
+    setSelected(new Set());
+    router.refresh();
+  }
+  function goto(params: Record<string, string | null>) {
+    const sp = new URLSearchParams();
+    if (params.list ?? activeList) sp.set("list", (params.list ?? activeList)!);
+    if (params.tag ?? (params.tag === null ? "" : activeTag)) {
+      const t = params.tag === null ? "" : (params.tag ?? activeTag);
+      if (t) sp.set("tag", t);
+    }
+    router.push(`/w/${slug}/leads${sp.toString() ? `?${sp}` : ""}`);
+  }
 
   async function runVerification() {
     setVerifying(true);
@@ -80,6 +118,52 @@ export function LeadsClient({
         <span className="ml-auto text-sm text-muted">{leads.length} leads shown</span>
       </div>
 
+      {/* tag filter row (buckets) */}
+      {allTags.length > 0 && (
+        <div className="flex items-center gap-1.5 mb-4 flex-wrap">
+          <span className="text-xs text-muted mr-1">Buckets:</span>
+          <button
+            onClick={() => goto({ tag: null })}
+            className={`px-2.5 py-1 rounded-full text-xs border ${!activeTag ? "border-primary text-primary font-medium" : "border-border text-muted hover:text-ink"}`}
+          >
+            All
+          </button>
+          {allTags.map((t) => (
+            <button
+              key={t}
+              onClick={() => goto({ tag: t })}
+              className={`px-2.5 py-1 rounded-full text-xs border ${activeTag === t ? "border-primary text-primary font-medium" : "border-border text-muted hover:text-ink"}`}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* bulk tag action bar */}
+      {selected.size > 0 && (
+        <Card className="mb-4 !p-3">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-sm font-medium">{selected.size} selected</span>
+            <Input
+              className="max-w-xs"
+              placeholder="tag name(s), comma-separated"
+              value={tagInput}
+              onChange={(e) => setTagInput(e.target.value)}
+            />
+            <Button onClick={() => applyTag(false)} disabled={!tagInput.trim()}>
+              Add tag
+            </Button>
+            <Button variant="outline" onClick={() => applyTag(true)} disabled={!tagInput.trim()}>
+              Remove tag
+            </Button>
+            <button className="text-xs text-muted hover:text-ink ml-2" onClick={() => setSelected(new Set())}>
+              clear selection
+            </button>
+          </div>
+        </Card>
+      )}
+
       {showImport && (
         <ImportWizard
           workspaceId={workspaceId}
@@ -95,20 +179,52 @@ export function LeadsClient({
         <Table>
           <thead>
             <tr>
+              <Th>
+                <input
+                  type="checkbox"
+                  checked={selected.size === leads.length && leads.length > 0}
+                  onChange={toggleAll}
+                  className="accent-[#B56FDC]"
+                />
+              </Th>
               <Th>Email</Th>
               <Th>Name</Th>
               <Th>Company</Th>
-              <Th>Title</Th>
+              <Th>Buckets</Th>
               <Th>Verification</Th>
             </tr>
           </thead>
           <tbody>
             {leads.map((l) => (
-              <tr key={l.id} className="hover:bg-border/20 cursor-pointer" onClick={() => setDrawer(l)}>
-                <Td>{l.email}</Td>
+              <tr key={l.id} className="hover:bg-border/20">
+                <Td>
+                  <input
+                    type="checkbox"
+                    checked={selected.has(l.id)}
+                    onChange={() => toggle(l.id)}
+                    className="accent-[#B56FDC]"
+                  />
+                </Td>
+                <Td>
+                  <button className="hover:underline" onClick={() => setDrawer(l)}>
+                    {l.email}
+                  </button>
+                </Td>
                 <Td>{[l.first_name, l.last_name].filter(Boolean).join(" ") || "—"}</Td>
                 <Td>{l.company ?? "—"}</Td>
-                <Td>{l.title ?? "—"}</Td>
+                <Td>
+                  <div className="flex gap-1 flex-wrap">
+                    {(l.tags ?? []).length ? (
+                      l.tags.map((t) => (
+                        <Chip key={t} tone="secondary">
+                          {t}
+                        </Chip>
+                      ))
+                    ) : (
+                      <span className="text-muted">—</span>
+                    )}
+                  </div>
+                </Td>
                 <Td>
                   <Chip tone={stateTone(l.verify_status)}>{l.verify_status}</Chip>
                 </Td>
@@ -117,7 +233,11 @@ export function LeadsClient({
           </tbody>
         </Table>
       ) : (
-        <Empty>No leads yet. Import a CSV to get started.</Empty>
+        <Empty icon="👥">
+          {activeTag || activeList
+            ? "No leads in this bucket."
+            : "No leads yet. Import a CSV (Apollo, Sales Navigator, or any format) to get started."}
+        </Empty>
       )}
 
       {drawer && <LeadDrawer lead={drawer} slug={slug} onClose={() => setDrawer(null)} />}
@@ -138,6 +258,7 @@ function ImportWizard({
   const [mapping, setMapping] = useState<string[]>([]);
   const [listChoice, setListChoice] = useState("__new__");
   const [newListName, setNewListName] = useState("");
+  const [importTags, setImportTags] = useState("");
   const [result, setResult] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -208,6 +329,7 @@ function ImportWizard({
         workspace_id: workspaceId,
         list_id: listChoice !== "__new__" ? listChoice : undefined,
         new_list_name: listChoice === "__new__" ? newListName : undefined,
+        tags: importTags.split(",").map((t) => t.trim()).filter(Boolean),
         rows: mapped,
       }),
     });
@@ -254,6 +376,12 @@ function ImportWizard({
                   onChange={(e) => setNewListName(e.target.value)}
                 />
               )}
+              <Input
+                className="max-w-xs"
+                placeholder="tag this batch (e.g. saas, london)"
+                value={importTags}
+                onChange={(e) => setImportTags(e.target.value)}
+              />
               <span className="text-sm text-muted">{rows.length - 1} rows</span>
             </div>
             <div className="overflow-x-auto">
@@ -330,6 +458,7 @@ function LeadDrawer({ lead, slug, onClose }: { lead: Lead; slug: string; onClose
               ["Title", lead.title],
               ["LinkedIn", lead.linkedin_url],
               ["Timezone", lead.timezone],
+              ["Buckets / tags", (lead.tags ?? []).join(", ")],
               ["Verification", `${lead.verify_status} (${lead.verify_provider ?? "—"})`],
             ] as [string, string | null | undefined][]
           ).map(([k, v]) => (

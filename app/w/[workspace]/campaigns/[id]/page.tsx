@@ -12,7 +12,7 @@ export default async function CampaignPage({
   const { workspace } = await requireWorkspace(params.workspace);
   const supabase = createClient();
 
-  const [{ data: campaign }, { data: steps }, { data: cms }, { data: mailboxes }, { data: lists }, { count: audience }, stateRows] =
+  const [{ data: campaign }, { data: steps }, { data: cms }, { data: mailboxes }, { data: lists }, { count: audience }, stateRows, tagRows] =
     await Promise.all([
       supabase.from("campaigns").select("*").eq("id", params.id).maybeSingle(),
       supabase.from("sequence_steps").select("*").eq("campaign_id", params.id).order("step_no").order("variant"),
@@ -21,6 +21,7 @@ export default async function CampaignPage({
       supabase.from("lead_lists").select("id, name").eq("workspace_id", workspace.id),
       supabase.from("campaign_leads").select("id", { count: "exact", head: true }).eq("campaign_id", params.id),
       supabase.from("campaign_leads").select("state").eq("campaign_id", params.id).limit(2000),
+      supabase.from("leads").select("tags").eq("workspace_id", workspace.id).limit(2000),
     ]);
   if (!campaign) notFound();
 
@@ -34,6 +35,7 @@ export default async function CampaignPage({
       attachedMailboxIds={(cms ?? []).map((r) => r.mailbox_id)}
       mailboxes={mailboxes ?? []}
       lists={lists ?? []}
+      tags={Array.from(new Set((tagRows.data ?? []).flatMap((r) => (r.tags as string[] | null) ?? []))).sort()}
       audienceCount={audience ?? 0}
       stateCounts={stateCounts}
       slug={workspace.slug}
