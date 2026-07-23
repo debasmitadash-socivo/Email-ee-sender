@@ -311,7 +311,11 @@ async function sendOne(db: SupabaseClient, cl: Row, usedMailboxes: Set<string>):
   const profile = knowledge?.profile ?? {};
   const trackingDomain = Deno.env.get("TRACKING_DOMAIN") ?? "";
   const unsubToken = await signToken({ e: email, w: campaign.workspace_id, cl: cl.id });
-  const unsubscribeUrl = `https://${trackingDomain}/u/${unsubToken}`;
+  // Free-tier fallback: no tracking domain → mailto: unsubscribe header
+  // (recipient replies/emails "unsubscribe", the reply classifier suppresses them).
+  const unsubscribeUrl = trackingDomain
+    ? `https://${trackingDomain}/u/${unsubToken}`
+    : `mailto:${mailbox.email}?subject=unsubscribe`;
   const plainText = settings.plain_text !== false;
   const msgToken = await signToken({ w: campaign.workspace_id, cl: cl.id, m: "" });
   const assembled = assembleBody({

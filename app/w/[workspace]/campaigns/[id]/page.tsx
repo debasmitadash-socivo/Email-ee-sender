@@ -12,7 +12,7 @@ export default async function CampaignPage({
   const { workspace } = await requireWorkspace(params.workspace);
   const supabase = createClient();
 
-  const [{ data: campaign }, { data: steps }, { data: cms }, { data: mailboxes }, { data: lists }, { count: audience }, stateRows, tagRows] =
+  const [{ data: campaign }, { data: steps }, { data: cms }, { data: mailboxes }, { data: lists }, { count: audience }, stateRows, tagRows, { data: templates }] =
     await Promise.all([
       supabase.from("campaigns").select("*").eq("id", params.id).maybeSingle(),
       supabase.from("sequence_steps").select("*").eq("campaign_id", params.id).order("step_no").order("variant"),
@@ -22,6 +22,11 @@ export default async function CampaignPage({
       supabase.from("campaign_leads").select("id", { count: "exact", head: true }).eq("campaign_id", params.id),
       supabase.from("campaign_leads").select("state").eq("campaign_id", params.id).limit(2000),
       supabase.from("leads").select("tags").eq("workspace_id", workspace.id).limit(2000),
+      supabase
+        .from("templates")
+        .select("id, name, subject, body")
+        .or(`workspace_id.eq.${workspace.id},workspace_id.is.null`)
+        .order("name"),
     ]);
   if (!campaign) notFound();
 
@@ -39,6 +44,7 @@ export default async function CampaignPage({
       audienceCount={audience ?? 0}
       stateCounts={stateCounts}
       slug={workspace.slug}
+      templates={(templates ?? []) as { id: string; name: string; subject: string; body: string }[]}
     />
   );
 }

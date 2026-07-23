@@ -43,8 +43,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     if (m.status !== "active") failures.push(`Mailbox ${m.email} is ${m.status} — reconnect or resume it.`);
   }
 
-  if (!process.env.TRACKING_DOMAIN)
-    failures.push("TRACKING_DOMAIN is not configured — unsubscribe links cannot be generated.");
+  // No TRACKING_DOMAIN → unsubscribe falls back to a mailto: List-Unsubscribe
+  // header (free, works on Gmail); open/click tracking simply stays off.
 
   const window = { ...DEFAULT_WINDOW, ...(settings.send_window ?? {}) };
   const [sh, sm] = window.start.split(":").map(Number);

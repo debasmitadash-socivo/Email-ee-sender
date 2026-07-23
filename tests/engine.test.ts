@@ -47,16 +47,25 @@ describe("render", () => {
     expect(r.missing).toContain("company");
     expect(r.missing).toContain("ai_opener");
   });
-  it("always appends unsubscribe + footer identity", () => {
+  it("appends footer identity; unsubscribe lives in the header, not the body", () => {
     const out = assembleBody({
       body: "Hello",
       profile: { footer_identity: "Socivo Ltd, London" },
       unsubscribeUrl: "https://go.example/u/tok",
       plainText: true,
     });
-    expect(out.text).toContain("Unsubscribe: https://go.example/u/tok");
+    expect(out.text).not.toContain("Unsubscribe:"); // no newsletter-style body footer
     expect(out.text).toContain("Socivo Ltd, London");
     expect(out.html).toBeUndefined(); // plain-text mode: text only
+  });
+  it("returns the bare body when there is no footer identity", () => {
+    const out = assembleBody({
+      body: "Hello",
+      profile: {},
+      unsubscribeUrl: "mailto:me@x.com?subject=unsubscribe",
+      plainText: true,
+    });
+    expect(out.text).toBe("Hello");
   });
 });
 

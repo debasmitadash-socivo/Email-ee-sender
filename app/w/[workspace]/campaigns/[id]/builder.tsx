@@ -15,6 +15,104 @@ interface StepDraft {
   body: string;
 }
 
+interface TemplateOption {
+  id: string;
+  name: string;
+  subject: string;
+  body: string;
+}
+
+// One-click sequence presets — proven cadences. Bodies use merge tags +
+// {{ai_icebreaker}} where personalisation belongs; edit freely after applying.
+const SEQUENCE_PRESETS: Record<string, { label: string; steps: Omit<StepDraft, "variant">[] }> = {
+  cold3: {
+    label: "Cold outreach · 3 touches (day 0 / 3 / 7)",
+    steps: [
+      {
+        step_no: 1,
+        delay_days: 0,
+        subject: "quick question about {{company}}",
+        body: "Hi {{first_name}},\n\n{{ai_icebreaker}}\n\nMost teams like yours lose hours every week to this — and it compounds quietly.\n\nWe help companies fix it without adding headcount. Worth a 15-minute look next week?",
+      },
+      {
+        step_no: 2,
+        delay_days: 3,
+        subject: "",
+        body: "Hi {{first_name}} — floating this back up.\n\nNo pressure either way; if the timing's wrong, tell me and I'll close the loop.",
+      },
+      {
+        step_no: 3,
+        delay_days: 4,
+        subject: "",
+        body: "Hi {{first_name}},\n\nI'll take the silence as \"not now\" and stop here.\n\nIf this becomes a priority later, my door's open — just reply to this thread and it'll reach me.",
+      },
+    ],
+  },
+  cold4: {
+    label: "Cold outreach · 4 touches (day 0 / 3 / 7 / 12)",
+    steps: [
+      {
+        step_no: 1,
+        delay_days: 0,
+        subject: "an idea for {{company}}",
+        body: "Hi {{first_name}},\n\n{{ai_icebreaker}}\n\nOne idea: teams at your stage usually see the fastest wins from fixing this one workflow first. Happy to share exactly how — takes 10 minutes.\n\nOpen to it?",
+      },
+      {
+        step_no: 2,
+        delay_days: 3,
+        subject: "",
+        body: "Hi {{first_name}},\n\nOne more thought since my last note: the teams that move on this early usually avoid the expensive version of the problem later.\n\nIf that resonates, 15 minutes is all I need. If not, I'll leave you be.",
+      },
+      {
+        step_no: 3,
+        delay_days: 4,
+        subject: "",
+        body: "Hi {{first_name}},\n\nWe recently helped a company much like {{company}} get a measurable result here — happy to send the one-pager.\n\nWant it?",
+      },
+      {
+        step_no: 4,
+        delay_days: 5,
+        subject: "",
+        body: "Hi {{first_name}},\n\nI'll take the silence as \"not now\" and stop here.\n\nIf this becomes a priority later, just reply to this thread and it'll reach me.",
+      },
+    ],
+  },
+  warm2: {
+    label: "Warm intro · 2 touches (day 0 / 4)",
+    steps: [
+      {
+        step_no: 1,
+        delay_days: 0,
+        subject: "good to connect, {{first_name}}",
+        body: "Hi {{first_name}},\n\nGood to connect recently. You mentioned things were busy on your side — one thing we do that might genuinely help: {{ai_icebreaker}}\n\nIf useful, I'll send over a short overview. No meeting needed.",
+      },
+      {
+        step_no: 2,
+        delay_days: 4,
+        subject: "",
+        body: "Hi {{first_name}} — did the overview land? Happy to walk through it in 10 minutes if that's easier.",
+      },
+    ],
+  },
+  revival2: {
+    label: "Revival · re-engage old leads (day 0 / 5)",
+    steps: [
+      {
+        step_no: 1,
+        delay_days: 0,
+        subject: "is this still on the radar?",
+        body: "Hi {{first_name}},\n\nWe spoke a while back about this and the timing wasn't right.\n\nThings have moved on our side since — {{ai_icebreaker}}\n\nWorth a fresh look, or shall I close the file?",
+      },
+      {
+        step_no: 2,
+        delay_days: 5,
+        subject: "",
+        body: "Hi {{first_name}} — last nudge on this. If now's still not the time, no hard feelings; reply \"close it\" and I won't follow up again.",
+      },
+    ],
+  },
+};
+
 export function CampaignBuilder(props: {
   campaign: Campaign;
   steps: SequenceStep[];
@@ -25,6 +123,7 @@ export function CampaignBuilder(props: {
   audienceCount: number;
   stateCounts: Record<string, number>;
   slug: string;
+  templates: TemplateOption[];
 }) {
   const router = useRouter();
   const { campaign } = props;
@@ -229,6 +328,36 @@ export function CampaignBuilder(props: {
 
       {tab === "Sequence" && (
         <div className="space-y-4">
+          {campaign.status === "draft" && (
+            <Card className="!p-4">
+              <div className="flex items-center gap-3 flex-wrap">
+                <span className="text-sm font-medium">Start from a proven cadence:</span>
+                <Select
+                  defaultValue=""
+                  onChange={(e) => {
+                    const preset = SEQUENCE_PRESETS[e.target.value];
+                    if (!preset) return;
+                    if (steps.some((s) => s.body.trim()) && !confirm("Replace the current steps with this preset?")) {
+                      e.target.value = "";
+                      return;
+                    }
+                    setSteps(preset.steps.map((s) => ({ ...s, variant: "A" })));
+                    e.target.value = "";
+                  }}
+                >
+                  <option value="">Choose a preset…</option>
+                  {Object.entries(SEQUENCE_PRESETS).map(([key, p]) => (
+                    <option key={key} value={key}>
+                      {p.label}
+                    </option>
+                  ))}
+                </Select>
+                <span className="text-xs text-muted">
+                  Fills the whole sequence — timing, follow-ups and breakup included. Edit anything after.
+                </span>
+              </div>
+            </Card>
+          )}
           {steps.map((s, i) => (
             <Card key={i}>
               <div className="flex items-center justify-between mb-3">
@@ -252,12 +381,36 @@ export function CampaignBuilder(props: {
                     </span>
                   )}
                 </div>
-                <button
-                  className="text-xs text-danger hover:underline"
-                  onClick={() => setSteps(steps.filter((_, j) => j !== i))}
-                >
-                  Remove
-                </button>
+                <div className="flex items-center gap-3">
+                  {props.templates.length > 0 && (
+                    <Select
+                      defaultValue=""
+                      className="text-xs py-1"
+                      onChange={(e) => {
+                        const t = props.templates.find((x) => x.id === e.target.value);
+                        if (t) {
+                          const next = [...steps];
+                          next[i] = { ...s, subject: s.step_no === 1 ? t.subject : t.subject || "", body: t.body };
+                          setSteps(next);
+                        }
+                        e.target.value = "";
+                      }}
+                    >
+                      <option value="">Insert template…</option>
+                      {props.templates.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name}
+                        </option>
+                      ))}
+                    </Select>
+                  )}
+                  <button
+                    className="text-xs text-danger hover:underline"
+                    onClick={() => setSteps(steps.filter((_, j) => j !== i))}
+                  >
+                    Remove
+                  </button>
+                </div>
               </div>
               <div className="space-y-3">
                 <div>

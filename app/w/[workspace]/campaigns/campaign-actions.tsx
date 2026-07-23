@@ -1,6 +1,6 @@
 "use client";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui";
 
 export function CampaignActions({
   campaignId,
@@ -32,7 +32,9 @@ export function CampaignActions({
   return (
     <div className="flex gap-1 text-xs">
       {campaignStatus === "draft" && (
-        <button className="text-secondary hover:underline">Configure</button>
+        <Link href={`/w/${slug}/campaigns/${campaignId}`} className="text-secondary hover:underline">
+          Configure
+        </Link>
       )}
       {campaignStatus === "running" && (
         <button onClick={pauseResume} className="text-secondary hover:underline">

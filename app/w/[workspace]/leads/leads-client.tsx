@@ -568,10 +568,10 @@ function LeadDrawer({ lead, slug, onClose }: { lead: Lead; slug: string; onClose
                 />
               </div>
               <div className="flex gap-2 pt-2">
-                <Button onClick={saveLead} disabled={busy} size="sm">
+                <Button onClick={saveLead} disabled={busy}>
                   {busy ? "…" : "Save"}
                 </Button>
-                <Button variant="ghost" onClick={() => setIsEditing(false)} size="sm">
+                <Button variant="ghost" onClick={() => setIsEditing(false)}>
                   Cancel
                 </Button>
               </div>
@@ -598,10 +598,10 @@ function LeadDrawer({ lead, slug, onClose }: { lead: Lead; slug: string; onClose
                 ))}
               </dl>
               <div className="flex gap-2 pt-3 border-t border-border">
-                <Button onClick={() => setIsEditing(true)} variant="outline" size="sm">
+                <Button onClick={() => setIsEditing(true)} variant="outline">
                   Edit
                 </Button>
-                <Button onClick={deleteLead} variant="danger" size="sm">
+                <Button onClick={deleteLead} variant="danger">
                   Delete
                 </Button>
               </div>

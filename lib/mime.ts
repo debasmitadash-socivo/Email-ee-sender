@@ -42,7 +42,10 @@ export function buildMime(input: MimeInput): string {
   if (input.references?.length) headers.push(`References: ${input.references.join(" ")}`);
   if (input.listUnsubscribe) {
     headers.push(`List-Unsubscribe: <${input.listUnsubscribe}>`);
-    headers.push("List-Unsubscribe-Post: List-Unsubscribe=One-Click");
+    // One-Click POST is only valid for https endpoints (RFC 8058), not mailto:
+    if (input.listUnsubscribe.startsWith("http")) {
+      headers.push("List-Unsubscribe-Post: List-Unsubscribe=One-Click");
+    }
   }
 
   let body: string;

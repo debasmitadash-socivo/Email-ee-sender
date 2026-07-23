@@ -1,72 +1,58 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { createClient } from "@/lib/supabase/server";
-import { requireMember } from "@/lib/api-guard";
+import { requireRole } from "@/lib/api-guard";
 
+const VALID_ROLES = new Set(["admin", "l3_full", "l2_limited", "l1_basic"]);
+
+// Invite (or directly add) a person to the workspace. If a user with that
+// email already exists they become a member immediately; otherwise a pending
+// invite is stored and auto-claimed the moment they sign up (0002 trigger).
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
-  if (!(await requireMember(params.id))) {
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  }
-
-  const supabase = createClient();
-  const { data: user } = await supabase.auth.getUser();
-  if (!user.user) return NextResponse.json({ error: "not authenticated" }, { status: 401 });
-
-  // Check if requester is admin
-  const { data: member } = await supabase
-    .from("workspace_members")
-    .select("role")
-    .eq("workspace_id", params.id)
-    .eq("user_id", user.user.id)
-    .maybeSingle();
-  if (member?.role !== "admin") {
-    return NextResponse.json({ error: "only admins can invite members" }, { status: 403 });
-  }
+  const caller = await requireRole(params.id, "admin");
+  if (!caller) return NextResponse.json({ error: "only admins can invite members" }, { status: 403 });
 
   const { email, role } = await req.json();
-  if (!email || !role) {
-    return NextResponse.json({ error: "email and role required" }, { status: 400 });
+  if (!email || !VALID_ROLES.has(role)) {
+    return NextResponse.json({ error: "email and a valid role are required" }, { status: 400 });
   }
 
   const admin = createAdminClient();
-
-  // Find or create user by email (sign up via invite link in practice)
-  const { data: invitee } = await admin.auth.admin.getUsersByEmail(email);
-  if (!invitee || invitee.length === 0) {
-    return NextResponse.json(
-      { error: "User does not exist. They must sign up first." },
-      { status: 422 }
-    );
-  }
-
-  const inviteeId = invitee[0].id;
-
-  // Check if already a member
-  const { data: existing } = await admin
-    .from("workspace_members")
+  const { data: existingUser } = await admin
+    .from("users")
     .select("id")
-    .eq("workspace_id", params.id)
-    .eq("user_id", inviteeId)
+    .ilike("email", email)
     .maybeSingle();
 
-  if (existing) {
-    return NextResponse.json({ error: "User is already a member" }, { status: 422 });
+  if (existingUser) {
+    const { error } = await admin
+      .from("workspace_members")
+      .upsert({ workspace_id: params.id, user_id: existingUser.id, role });
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ ok: true, added: true });
   }
 
-  // Create workspace membership
+  const { error } = await admin.from("workspace_invites").upsert(
+    { workspace_id: params.id, email: email.toLowerCase(), role, invited_by: caller.userId },
+    { onConflict: "workspace_id,email" }
+  );
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ ok: true, added: false });
+}
+
+// Cancel a pending invite: DELETE /members?invite=<inviteId>
+export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+  const caller = await requireRole(params.id, "admin");
+  if (!caller) return NextResponse.json({ error: "only admins can manage invites" }, { status: 403 });
+
+  const inviteId = req.nextUrl.searchParams.get("invite");
+  if (!inviteId) return NextResponse.json({ error: "invite id required" }, { status: 400 });
+
+  const admin = createAdminClient();
   const { error } = await admin
-    .from("workspace_members")
-    .insert({
-      workspace_id: params.id,
-      user_id: inviteeId,
-      role,
-      invited_by: user.user.id,
-      accepted_at: new Date().toISOString(), // Auto-accept for now (in practice: email invite)
-    });
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
+    .from("workspace_invites")
+    .delete()
+    .eq("id", inviteId)
+    .eq("workspace_id", params.id);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });
 }

@@ -40,7 +40,9 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
         const assembled = assembleBody({
           body: bodyRendered,
           profile,
-          unsubscribeUrl: `https://${process.env.TRACKING_DOMAIN ?? "tracking-domain-not-set"}/u/…`,
+          unsubscribeUrl: process.env.TRACKING_DOMAIN
+            ? `https://${process.env.TRACKING_DOMAIN}/u/…`
+            : "mailto:…?subject=unsubscribe",
           usTargeting: settings.us_targeting,
           plainText: settings.plain_text !== false,
         });

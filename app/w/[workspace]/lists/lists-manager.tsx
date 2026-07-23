@@ -1,29 +1,34 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Button, Card, Input, Chip } from "@/components/ui";
+import Link from "next/link";
+import { Button, Card, Chip, Input } from "@/components/ui";
 
 interface List {
   id: string;
   name: string;
   created_at: string;
+  count: number;
 }
 
 export function ListsManager({
   workspaceId,
+  slug,
   lists,
-  allTags,
+  tagCounts,
   totalLeads,
 }: {
   workspaceId: string;
+  slug: string;
   lists: List[];
-  allTags: string[];
+  tagCounts: Record<string, number>;
   totalLeads: number;
 }) {
   const router = useRouter();
   const [newListName, setNewListName] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const tags = Object.keys(tagCounts).sort();
 
   async function createList() {
     if (!newListName.trim()) return;
@@ -45,7 +50,7 @@ export function ListsManager({
   }
 
   async function deleteList(listId: string) {
-    if (!confirm("Delete this list? Leads will keep their data but list assignment is removed.")) return;
+    if (!confirm("Delete this list? Leads keep their data — they just lose the list assignment.")) return;
     const res = await fetch(`/api/leads/lists/${listId}`, { method: "DELETE" });
     if (res.ok) router.refresh();
   }
@@ -54,9 +59,9 @@ export function ListsManager({
     <div className="space-y-6">
       <Card>
         <div className="text-sm font-medium mb-3">Create new list</div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 max-w-xl">
           <Input
-            placeholder="e.g. Q4 2024 Outreach, SMB Tech Leads"
+            placeholder="e.g. Q3 UK SaaS founders, Apollo import July"
             value={newListName}
             onChange={(e) => setNewListName(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && createList()}
@@ -67,31 +72,34 @@ export function ListsManager({
         </div>
         {msg && <p className="text-xs text-danger mt-2">{msg}</p>}
         <p className="text-xs text-muted mt-2">
-          Lists are sequential containers for leads. Use one per campaign or per cohort. When building a campaign
-          audience, select a list to lock in the leads for that campaign.
+          A list is a fixed group of leads — usually one per campaign or per import. Add leads to it from the
+          Leads page (select leads → &quot;Add to list…&quot;), or pick the list during CSV import.
         </p>
       </Card>
 
       <Card>
         <div className="text-sm font-medium mb-4">
-          Lists ({lists.length}) · Total leads: {totalLeads}
+          Lists ({lists.length}) · {totalLeads} leads total
         </div>
         {lists.length === 0 ? (
-          <p className="text-sm text-muted">No lists yet. Create one above to organize leads.</p>
+          <p className="text-sm text-muted">No lists yet. Create one above, then add leads to it from the Leads page.</p>
         ) : (
           <div className="space-y-2">
             {lists.map((list) => (
-              <div key={list.id} className="flex items-center justify-between gap-3 p-3 border border-border rounded">
+              <div key={list.id} className="flex items-center justify-between gap-3 p-3 border border-border rounded-md">
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium">{list.name}</div>
+                  <Link href={`/w/${slug}/leads?list=${list.id}`} className="text-sm font-medium hover:underline">
+                    {list.name}
+                  </Link>
                   <div className="text-xs text-muted">
-                    Created {new Date(list.created_at).toLocaleDateString()}
+                    {list.count} lead{list.count === 1 ? "" : "s"} · created{" "}
+                    {new Date(list.created_at).toLocaleDateString("en-GB")}
                   </div>
                 </div>
-                <button
-                  onClick={() => deleteList(list.id)}
-                  className="text-xs text-danger hover:underline"
-                >
+                <Link href={`/w/${slug}/leads?list=${list.id}`} className="text-xs text-secondary hover:underline">
+                  View leads
+                </Link>
+                <button onClick={() => deleteList(list.id)} className="text-xs text-danger hover:underline">
                   Delete
                 </button>
               </div>
@@ -100,37 +108,44 @@ export function ListsManager({
         )}
       </Card>
 
-      {allTags.length > 0 && (
-        <Card>
-          <div className="text-sm font-medium mb-3">Tags in use ({allTags.length})</div>
+      <Card>
+        <div className="text-sm font-medium mb-3">Tags in use ({tags.length})</div>
+        {tags.length === 0 ? (
+          <p className="text-sm text-muted">
+            No tags yet. In the Leads page, select leads and type a tag name in the bulk bar to create one —
+            tags are created the moment you first use them.
+          </p>
+        ) : (
           <div className="flex flex-wrap gap-2">
-            {allTags.map((tag) => (
-              <Chip key={tag} tone="secondary">
-                {tag}
-              </Chip>
+            {tags.map((tag) => (
+              <Link key={tag} href={`/w/${slug}/leads?tag=${encodeURIComponent(tag)}`}>
+                <Chip tone="secondary">
+                  {tag} · {tagCounts[tag]}
+                </Chip>
+              </Link>
             ))}
           </div>
-          <p className="text-xs text-muted mt-3">
-            Tags are flexible labels applied to leads. In the Leads page, click any tag to filter, or bulk-tag multiple
-            leads at once. Use tags to build dynamic campaign audiences alongside lists.
-          </p>
-        </Card>
-      )}
+        )}
+        <p className="text-xs text-muted mt-3">
+          Tags are flexible labels — a lead can have many. Click a tag to see its leads. Campaigns can target a
+          tag directly in the Audience tab.
+        </p>
+      </Card>
 
       <Card>
-        <div className="text-sm font-medium mb-3">How to use</div>
+        <div className="text-sm font-medium mb-3">How this fits together</div>
         <div className="space-y-2 text-xs text-muted">
           <div>
-            <span className="font-medium text-foreground">Create a list</span> when you want a fixed set of leads
-            (e.g., "Q4 Targets"). Go to the Leads page, select all leads for that list, then bulk-assign them here.
+            <span className="font-medium text-ink">1. Import leads</span> — Leads page → Import CSV (Apollo /
+            Sales Navigator exports auto-map). Assign a list and/or tags during import.
           </div>
           <div>
-            <span className="font-medium text-foreground">Use tags</span> for flexible grouping. In Leads, bulk-tag
-            leads (e.g., "follow-up", "hot"). Then in Campaigns, filter by tag to build dynamic audiences.
+            <span className="font-medium text-ink">2. Organise</span> — select leads → bulk bar → add tags or
+            &quot;Add to list…&quot;. Create either right there or on this page.
           </div>
           <div>
-            <span className="font-medium text-foreground">Build a campaign</span>: Go to Campaigns → Create →
-            Audience. Choose "List" (fixed) or "Tag" (dynamic) or "Test emails" (your own inboxes).
+            <span className="font-medium text-ink">3. Target</span> — Campaigns → Audience tab → choose a list,
+            a tag, or 2-3 of your own test emails for a safe dry run.
           </div>
         </div>
       </Card>

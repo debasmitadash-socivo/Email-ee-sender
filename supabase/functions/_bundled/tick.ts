@@ -196,7 +196,7 @@ function buildMime(input) {
   if ((_a = input.references) == null ? void 0 : _a.length) headers.push(`References: ${input.references.join(" ")}`);
   if (input.listUnsubscribe) {
     headers.push(`List-Unsubscribe: <${input.listUnsubscribe}>`);
-    headers.push("List-Unsubscribe-Post: List-Unsubscribe=One-Click");
+    if (input.listUnsubscribe.startsWith("http")) headers.push("List-Unsubscribe-Post: List-Unsubscribe=One-Click");
   }
   let body;
   if (input.html) {
@@ -649,11 +649,10 @@ function assembleBody(args) {
   const footerLines = [];
   if (args.footerIdentity) footerLines.push(args.footerIdentity);
   if (args.usTargeting && args.postalAddress) footerLines.push(args.postalAddress);
-  footerLines.push(`Don't want to hear from me again? Unsubscribe: ${args.unsubscribeUrl}`);
-  const text = `${args.body.trim()}
+  const text = footerLines.length ? `${args.body.trim()}
 
 --
-${footerLines.join("\n")}`;
+${footerLines.join("\n")}` : args.body.trim();
   if (args.plainText) return { text };
   const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   let htmlBody = esc(args.body.trim()).replace(/\n/g, "<br>");
@@ -663,11 +662,9 @@ ${footerLines.join("\n")}`;
       return `<a href="${wrapped}">${url}</a>`;
     });
   }
-  const htmlFooter = footerLines.map(
-    (l) => l.includes(args.unsubscribeUrl) ? `Don't want to hear from me again? <a href="${args.unsubscribeUrl}">Unsubscribe</a>` : esc(l).replace(/\n/g, "<br>")
-  ).join("<br>");
+  const htmlFooter = footerLines.map((l) => esc(l).replace(/\n/g, "<br>")).join("<br>");
   const pixel = args.trackingPixelUrl ? `<img src="${args.trackingPixelUrl}" width="1" height="1" alt="" style="display:none">` : "";
-  const html = `<div>${htmlBody}${args.signatureHtml ? `<br><br>${args.signatureHtml}` : ""}<br><br><span style="color:#6B6B76;font-size:12px">--<br>${htmlFooter}</span>${pixel}</div>`;
+  const html = `<div>${htmlBody}${args.signatureHtml ? `<br><br>${args.signatureHtml}` : ""}${htmlFooter ? `<br><br><span style="color:#6B6B76;font-size:12px">--<br>${htmlFooter}</span>` : ""}${pixel}</div>`;
   return { text, html };
 }
 
@@ -849,7 +846,7 @@ async function sendOne(db, cl, usedMailboxes) {
   const profile = (knowledge == null ? void 0 : knowledge.profile) ?? {};
   const trackingDomain = Deno.env.get("TRACKING_DOMAIN") ?? "";
   const unsubToken = await signToken({ e: email, w: campaign.workspace_id, cl: cl.id });
-  const unsubscribeUrl = `https://${trackingDomain}/u/${unsubToken}`;
+  const unsubscribeUrl = trackingDomain ? `https://${trackingDomain}/u/${unsubToken}` : `mailto:${mailbox.email}?subject=unsubscribe`;
   const plainText = settings.plain_text !== false;
   const msgToken = await signToken({ w: campaign.workspace_id, cl: cl.id, m: "" });
   const assembled = assembleBody({
